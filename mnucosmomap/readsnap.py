@@ -99,7 +99,7 @@ class snapshot_header:
  
 # ----- find offset and size of data block ----- 
 
-def find_block(filename, format, swap, block, block_num, only_list_blocks=False):
+def find_block(filename, format, swap, block, block_num, only_list_blocks=False, verbose=False):
     if (not os.path.exists(filename)):
         print("file not found:", filename)
         sys.exit()
@@ -127,16 +127,18 @@ def find_block(filename, format, swap, block, block_num, only_list_blocks=False)
             curblocksize = curblocksize.byteswap()
     
         # - print some debug info about found data blocks -
-        if format==2:
-            print(curblock, curblock_num, curblocksize)
-        else:
-            print(curblock_num, curblocksize) 
+        if verbose: 
+            if format==2:
+                print(curblock, curblock_num, curblocksize)
+            else:
+                print(curblock_num, curblocksize) 
     
         if only_list_blocks:
-            if format==2:
-                print(curblock_num,curblock,f.tell(),curblocksize)
-            else:
-                print(curblock_num,f.tell(),curblocksize)
+            if verbose:
+                if format==2:
+                    print(curblock_num,curblock,f.tell(),curblocksize)
+                else:
+                    print(curblock_num,f.tell(),curblocksize)
             found = False
         
     
@@ -198,7 +200,7 @@ def read_block(filename, block, parttype=-1, physical_velocities=True, no_masses
   
     head = snapshot_header(curfilename)
     format = head.format
-    print("FORMAT=", format)
+    if verbose: print("FORMAT=", format)
     swap    = head.swap
     npart   = head.npart
     massarr = head.massarr
@@ -321,8 +323,9 @@ def read_block(filename, block, parttype=-1, physical_velocities=True, no_masses
         else: 
             actual_curpartnum = curpartnum
             add_offset = np.int32(0)
-        print(curfilename, format, swap, block, block_num)
-        offset,blocksize = find_block(curfilename,format,swap,block,block_num)
+        if verbose: 
+            print(curfilename, format, swap, block, block_num)
+        offset,blocksize = find_block(curfilename,format,swap,block,block_num, verbose=verbose)
     
         if i==0: # fix data type for ID if long IDs are used
             if block=="ID  ":
