@@ -20,9 +20,11 @@ def mNuParticles_subbox(mneut, nreal, nzbin, nsubbox, sim='paco', nside=8, overw
     if nsubbox > nside**3: 
         raise ValueError('%i exceeds number of subboxes specifed' % nsubbox) 
     if sim not in ['paco']: raise NotImplementedError('%s simulation not supported yet') 
-
+    
+    if mneut == 0.1: str_mneut = '0.10'
+    else: str_mneut = str(mneut) 
     _dir = ''.join([UT.dat_dir(), 'sims/paco/', # directory 
-        str(mneut), 'eV/', str(nreal), '/snapdir_', str(nzbin).zfill(3), '/'])
+        str_mneut, 'eV/', str(nreal), '/snapdir_', str(nzbin).zfill(3), '/'])
     if not os.path.isdir(_dir): raise ValueError("directory %s not found" % _dir)
     # snapshot subbox file 
     f = ''.join([_dir, 'snap_', str(nzbin).zfill(3), '.nside', str(nside), '.', str(nsubbox), '.hdf5']) 
@@ -99,8 +101,10 @@ def mNuParticles(mneut, nreal, nzbin, sim='paco', verbose=False):
         simulatin 
     '''
     if sim not in ['paco']: raise NotImplementedError('%s simulation not supported yet') 
+    if mneut == 0.1: str_mneut = '0.10'
+    else: str_mneut = str(mneut) 
     _dir = ''.join([UT.dat_dir(), 'sims/paco/', # directory 
-        str(mneut), 'eV/', str(nreal), '/snapdir_', str(nzbin).zfill(3), '/'])
+        str_mneut, 'eV/', str(nreal), '/snapdir_', str(nzbin).zfill(3), '/'])
     if not os.path.isdir(_dir): raise ValueError("directory %s not found" % _dir)
     f = ''.join([_dir, 'snap_', str(nzbin).zfill(3)]) # snapshot 
     #if not os.path.isfile(f): raise ValueError("file %s not found" % f)
