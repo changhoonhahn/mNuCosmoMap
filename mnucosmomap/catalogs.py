@@ -13,6 +13,13 @@ from mnucosmomap import util as UT
 from mnucosmomap import readsnap as ReadSnap
 
 
+def dispField(mneut, nreal, nzbin, nsubbox, sim='paco', nside=8, overwrite=False, verbose=False):
+    ''' Calculate the displacement field given subbox
+    '''
+    subbox = mNuParticles_subbox(mneut, nreal, nzbin, nsubbox, sim=sim, nside=nside)
+
+    # put it into nbodykit mesh object
+
 def mNuParticles_subbox(mneut, nreal, nzbin, nsubbox, sim='paco', nside=8, overwrite=False, verbose=False): 
     ''' Read in (and write out if it doesn't exist) subbox of snapshots generated from 
     '''
@@ -107,6 +114,43 @@ def mNuParticles(mneut, nreal, nzbin, sim='paco', verbose=False):
         str_mneut, 'eV/', str(nreal), '/snapdir_', str(nzbin).zfill(3), '/'])
     if not os.path.isdir(_dir): raise ValueError("directory %s not found" % _dir)
     f = ''.join([_dir, 'snap_', str(nzbin).zfill(3)]) # snapshot 
+    #if not os.path.isfile(f): raise ValueError("file %s not found" % f)
+
+    # read in Gadget header
+    header = ReadSnap.read_gadget_header(f)
+
+    # read in CDM particles (parttype = 1) and create catalogue
+    read_keys = ['POS ', 'VEL ', 'ID  ', 'MASS'] # currently only reading POS, VEL, ID, and MASS
+    save_keys = ['Position', 'Velocity', 'ID', 'Mass'] 
+    
+    particle_data = {} 
+    particle_data['meta'] = header # store meta data
+    for k_s, k_r in zip(save_keys, read_keys): 
+        particle_data[k_s] = ReadSnap.read_block(f, k_r, parttype=1, verbose=verbose)
+        if k_s == 'Position': 
+            particle_data[k_s] /= 1000. # convert ot Mpc/h 
+    return particle_data 
+
+
+def mNuICs(nreal, sim='paco', verbose=False): 
+    ''' Read in initial condition of  Paco's simulations. According to 
+    Paco, each of the realizations (regardless of neutrino mass) should 
+    have the same initial conditions. 
+
+    parameters
+    ----------
+    nreal : int,
+        realization number 
+
+    sim : str
+        option kwarg to specify which simulation. At this moment
+        this doesn't really do much since we only have paco's 
+        simulatin 
+    '''
+    if sim not in ['paco']: raise NotImplementedError('%s simulation not supported yet') 
+    _dir = ''.join([UT.dat_dir(), 'sims/paco/0.0eV/', str(nreal), '/ICs/'])
+    if not os.path.isdir(_dir): raise ValueError("directory %s not found" % _dir)
+    f = ''.join([_dir, 'ics']) # snapshot 
     #if not os.path.isfile(f): raise ValueError("file %s not found" % f)
 
     # read in Gadget header
