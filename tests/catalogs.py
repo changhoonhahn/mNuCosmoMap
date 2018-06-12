@@ -4,6 +4,7 @@ Tests for mnucosmomap.catalogs
 
 
 '''
+import numpy as np 
 from mnucosmomap import util as UT 
 from mnucosmomap import catalogs as mNuCat 
 
@@ -88,33 +89,40 @@ def _mNuICs_subbox():
     '''
     nreal = 1 
     sim = 'paco' # only paco is supported anyway. 
-    
-    # read in the particles
-    cat = mNuCat.mNuICs(nreal, sim=sim, verbose=False)
-    insubbox = ((cat['Position'][:,0] < 10.) & (cat['Position'][:,1] < 10.) & (cat['Position'][:,2] < 10.)) 
-    print(cat['ID'][insubbox])
 
-    fig = plt.figure()
+    # read in particles ID within subbox
+    subbox = mNuCat.mNuICs_subbox(nreal, 1, sim=sim, nside=8, verbose=False)
+    sub_id = subbox['ID'].flatten()
+    # read in initial conditions  
+    ics = mNuCat.mNuICs(nreal, sim=sim, verbose=False)
+    
+    isort_ics = np.argsort(ics['ID']) 
+    assert np.array_equal(ics['ID'][isort_ics][(sub_id-1).astype('int')], sub_id)
+    x_sub = ics['Position'][:,0][isort_ics][(sub_id-1).astype('int')]
+    y_sub = ics['Position'][:,1][isort_ics][(sub_id-1).astype('int')]
+    z_sub = ics['Position'][:,2][isort_ics][(sub_id-1).astype('int')]
+
+    fig = plt.figure(figsize=(12,4))
     sub = fig.add_subplot(131) # x vs y 
-    sub.scatter(cat['Position'][:,0][insubbox], cat['Position'][:,1][insubbox], c='k', s=3) 
+    sub.scatter(x_sub, y_sub, c='k', s=3) 
     sub.set_xlabel('X', fontsize=20) 
-    sub.set_xlim([0., 10.]) 
+    #sub.set_xlim([-0.1, 10.]) 
     sub.set_ylabel('Y', fontsize=20) 
-    sub.set_ylim([0., 10.]) 
+    #sub.set_ylim([-0.1, 10.]) 
 
     sub = fig.add_subplot(132) # z vs y 
-    sub.scatter(cat['Position'][:,2][insubbox], cat['Position'][:,1][insubbox], c='k', s=3) 
+    sub.scatter(z_sub, y_sub, c='k', s=3) 
     sub.set_xlabel('Z', fontsize=20) 
-    sub.set_xlim([0., 10.]) 
+    #sub.set_xlim([-0.1, 10.]) 
     sub.set_ylabel('Y', fontsize=20) 
-    sub.set_ylim([0., 10.]) 
+    #sub.set_ylim([-0.1, 10.]) 
     
     sub = fig.add_subplot(133) # z vs y 
-    sub.scatter(cat['Position'][:,2][insubbox], cat['Position'][:,0][insubbox], c='k', s=3) 
+    sub.scatter(z_sub, x_sub, c='k', s=3) 
     sub.set_xlabel('Z', fontsize=20) 
-    sub.set_xlim([0., 10.]) 
+    #sub.set_xlim([-0.1, 10.]) 
     sub.set_ylabel('X', fontsize=20) 
-    sub.set_ylim([0., 10.]) 
+    #sub.set_ylim([-0.1, 10.]) 
     fig.savefig(''.join([UT.fig_dir(), '_mNuICs_subbox.png']), bbox_inches='tight') 
     return None 
 
@@ -134,7 +142,7 @@ def _mNuICs():
     fig = plt.figure()
     sub = fig.add_subplot(111)
     sub.scatter(cat['Position'][:,0][::10000], cat['Position'][:,1][::10000], c='k', s=0.1) 
-    sub.scatter(cat['Position'][:100,0], cat['Position'][:100,1], c='C1', s=5) 
+    sub.scatter(cat['Position'][:1000,0], cat['Position'][:1000,1], c='C1', s=1) 
     sub.set_xlabel('X', fontsize=20) 
     sub.set_xlim([0., 1000.]) 
     sub.set_ylabel('Y', fontsize=20) 
@@ -143,6 +151,38 @@ def _mNuICs():
     return None 
 
 
+def _mNuDispField_subbox(): 
+    '''
+    '''
+    dfield = mNuCat.mNuDispField_subbox(1, 0.0, 1, 2, sim='paco', verbose=True) 
+    fig = plt.figure(figsize=(15,5))
+    X, Y = np.meshgrid(np.arange(dfield['dispfield'].shape[1]), np.arange(dfield['dispfield'].shape[2]))
+    for i in range(3): 
+        sub = fig.add_subplot(1,3,i+1)
+        print('%f < d_x < %f' % 
+                (dfield['dispfield'][0,:,:,10*i].min(), dfield['dispfield'][0,:,:,10*i].max()))
+        print('%f < d_y < %f' % 
+                (dfield['dispfield'][1,:,:,10*i].min(), dfield['dispfield'][1,:,:,10*i].max()))
+        sub.quiver(X, Y, dfield['dispfield'][0,:,:,10*i], dfield['dispfield'][1,:,:,10*i]) 
+        sub.set_xlabel('X', fontsize=25) 
+        sub.set_xlim([0., dfield['dispfield'].shape[1]])
+        if i == 0: sub.set_ylabel('Y', fontsize=25) 
+        sub.set_ylim([0., dfield['dispfield'].shape[2]])
+        sub.set_title(r'$i_z =$ %i' % (10*i), fontsize=20) 
+    fig.savefig(''.join([UT.fig_dir(), '_mNuDispField_subbox.png']), bbox_inches='tight') 
+    return None
+
+
+def _mNuDispField(): 
+    '''
+    '''
+    dfield = mNuCat.mNuDispField(0.0, 1, 2, sim='paco', verbose=False) 
+    print dfield['ID']
+    print dfield['dispfield']
+ 
+
 if __name__=="__main__": 
-    _mNuICs()
-    _mNuICs_subbox()
+    _mNuDispField_subbox()
+    #_mNuDispField()
+    #_mNuICs_subbox()
+    #_mNuICs()
