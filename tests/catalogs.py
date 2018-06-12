@@ -154,7 +154,7 @@ def _mNuICs():
 def _mNuDispField_subbox(): 
     '''
     '''
-    dfield = mNuCat.mNuDispField_subbox(1, 0.0, 1, 2, sim='paco', verbose=True) 
+    dfield = mNuCat.mNuDispField_subbox(1, 0.0, 1, 2, sim='paco', boundary_correct=True, verbose=True) 
     fig = plt.figure(figsize=(15,5))
     X, Y = np.meshgrid(np.arange(dfield['dispfield'].shape[1]), np.arange(dfield['dispfield'].shape[2]))
     for i in range(3): 
@@ -174,11 +174,29 @@ def _mNuDispField_subbox():
 
 
 def _mNuDispField(): 
+    ''' Check that the displacement fields are properly calculated.  
     '''
-    '''
-    dfield = mNuCat.mNuDispField(0.0, 1, 2, sim='paco', verbose=False) 
-    print dfield['ID']
-    print dfield['dispfield']
+    dfield = mNuCat.mNuDispField(0.0, 1, 2, boundary_correct=False, sim='paco', verbose=False) 
+    print('%i objects with cross boundary displacements' % np.sum(np.abs(dfield['dispfield']) > 900.))
+    print('they account for %f of all the objects' % 
+            (float(np.sum(np.abs(dfield['dispfield']) > 900.))/float(len(dfield['ID']))))
+
+    dfield_corr = mNuCat.mNuDispField(0.0, 1, 2, boundary_correct=True, sim='paco', verbose=False) 
+
+    #crossbound = (np.abs(dfield['dispfield']) > 250.)
+    #crossbound_corr = (np.abs(dfield_corr['dispfield']) > 250.)
+    fig = plt.figure()
+    sub = fig.add_subplot(111)
+    #_ = sub.hist(dfield['dispfield'], range=(-1000., 1000.), bins=20, normed=True)
+    for i in range(3): 
+        _ = sub.hist(dfield['dispfield'][:,i], range=(-1000., 1000.), bins=200, color='k', normed=True)
+    for i in range(3): 
+        _ = sub.hist(dfield_corr['dispfield'][:,i], range=(-1000., 1000.), bins=200, color='C1', normed=True)
+    sub.set_xlim([-1000., 1000.]) 
+    sub.set_ylim([0., 0.001]) 
+    fig.savefig(''.join([UT.fig_dir(), '_mNuDispField.png']), bbox_inches='tight') 
+    plt.close() 
+    return None 
  
 
 if __name__=="__main__": 

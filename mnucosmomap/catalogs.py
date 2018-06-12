@@ -76,7 +76,7 @@ def mNuParticles_subbox(mneut, nreal, nzbin, nsubbox, sim='paco', nside=8, overw
     return subbox 
 
 
-def mNuDispField_subbox(nsubbox, mneut, nreal, nzbin, sim='paco', nside=8, 
+def mNuDispField_subbox(nsubbox, mneut, nreal, nzbin, sim='paco', nside=8, boundary_correct=True, 
         overwrite=False, verbose=False): 
     ''' Read in (or construct) displacement field of particles that are within
     the subbox in the initial conditions.
@@ -102,8 +102,10 @@ def mNuDispField_subbox(nsubbox, mneut, nreal, nzbin, sim='paco', nside=8,
             subbox[k] = fsub[k].value 
         fsub.close() 
     else: # write file 
-        # read in displacement of all the particles
-        dispfield = mNuDispField(mneut, nreal, nzbin, sim=sim, 
+        # read in displacement of all the particles 
+        # (boundary correction is intentionally not applied so that 
+        # the code can be modularly improved on)
+        dispfield = mNuDispField(mneut, nreal, nzbin, sim=sim, boundary_correct=False,
                 overwrite=overwrite, verbose=verbose)
         # read in subbox indicies
         subb = mNuICs_subbox(nreal, nsubbox, sim=sim, nside=nside, verbose=verbose)
@@ -125,6 +127,17 @@ def mNuDispField_subbox(nsubbox, mneut, nreal, nzbin, sim='paco', nside=8,
         fsub.create_dataset('ID', data=subbox['ID']) 
         fsub.create_dataset('dispfield', data=subbox['dispfield']) 
         fsub.close() 
+
+    if boundary_correct: 
+        # correct for the cases where particles cross the periodic boundaries 
+        # the correction at the moment is brute forced. 
+        for i in range(3): 
+            cross_neg = (subbox['dispfield'][i,:,:,:].flatten() < -900.) 
+            subbox['dispfield'][i,cross_neg.reshape(subbox['dispfield'].shape[1:])] += 1000.
+            
+            cross_pos = (subbox['dispfield'][i,:,:,:].flatten() > 900.) 
+            subbox['dispfield'][i,cross_pos.reshape(subbox['dispfield'].shape[1:])] = \
+                    1000. - subbox['dispfield'][i,cross_pos.reshape(subbox['dispfield'].shape[1:])]
     return subbox
 
 
@@ -216,7 +229,7 @@ def mNuICs_subbox(nreal, nsubbox, sim='paco', nside=8, overwrite=False, verbose=
     return subbox 
 
 
-def mNuDispField(mneut, nreal, nzbin, sim='paco', overwrite=False, verbose=False): 
+def mNuDispField(mneut, nreal, nzbin, boundary_correct=True, sim='paco', overwrite=False, verbose=False): 
     ''' Read in displacement field of the snapshot generated from Paco's code 
 
     parameters
@@ -273,7 +286,8 @@ def mNuDispField(mneut, nreal, nzbin, sim='paco', overwrite=False, verbose=False
         dispfield = {} 
         dispfield['meta'] = par['meta'].copy() 
         dispfield['ID'] = ics['ID'][isort_ics]
-        dispfield['dispfield'] = ics['Position'][isort_ics] - par['Position'][isort_par]
+        # position @ snapshot - position @ initial condition
+        dispfield['dispfield'] = par['Position'][isort_par] - ics['Position'][isort_ics]
         
         fdisp = h5py.File(f, 'w') # save ID's to hdf5 file 
         for k in dispfield.keys(): 
@@ -284,6 +298,15 @@ def mNuDispField(mneut, nreal, nzbin, sim='paco', overwrite=False, verbose=False
             fdisp.attrs.create(k, dispfield['meta'][k]) 
         fdisp.close() 
 
+    if boundary_correct: 
+        # correct for the cases where particles cross the periodic boundaries 
+        # the correction at the moment is brute forced. 
+        for i in range(3): 
+            cross_neg = (dispfield['dispfield'][:,i] < -900.) 
+            dispfield['dispfield'][cross_neg,i] += 1000.
+            
+            cross_pos = (dispfield['dispfield'][:,i] > 900.) 
+            dispfield['dispfield'][cross_pos,i] = 1000. - dispfield['dispfield'][cross_pos,i]
     return dispfield 
 
 
