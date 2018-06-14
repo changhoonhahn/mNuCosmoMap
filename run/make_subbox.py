@@ -19,6 +19,18 @@ mpl.rcParams['ytick.major.width'] = 1.5
 mpl.rcParams['legend.frameon'] = False
 
 
+def mNuDispField_subbox(mneut, nreal, nzbin, sim='paco', nside=8, nsubbox=None): 
+    '''
+    '''
+    if nsubbox is None: nsubboxes = range(nside**3)
+    else: nsubboxes = [nsubbox]
+    for i in nsubboxes: # write subbox 
+        print('writing subbox %i of %i' % (i, nside**3))
+        dfield = mNuCat.mNuDispField_subbox(i, mneut, nreal, nzbin, 
+                sim=sim, boundary_correct=True, verbose=False) 
+    return None
+
+
 def mNuParticles_subbox(mneut, nreal, nzbin=2, sim='paco', nside=8, nsubbox=None): 
     ''' Generate suboxes for given mneut, nreal, nzbin, sim, and nside using 
     mnucosmomap.catalogs.mNuParticles_subbox  
@@ -67,7 +79,7 @@ if __name__=="__main__":
     nzbin = int(sys.argv[3]) 
     nside = int(sys.argv[4]) 
     nsubbox = int(sys.argv[5]) 
-    mNuParticles_subbox(mneut, nreal, nzbin=nzbin, nside=nside, nsubbox=nsubbox)
+    mNuDispField_subbox(mneut, nreal, nzbin=nzbin, nside=nside, nsubbox=nsubbox)
     
     # randomly check a few subboxes to make sure. 
     i_rand = np.random.choice(range(nsubbox), size=3, replace=False) 

@@ -24,6 +24,106 @@ mpl.rcParams['ytick.major.width'] = 1.5
 mpl.rcParams['legend.frameon'] = False
 
 
+def _mNuDispField_subbox_mneut(): 
+    '''
+    '''
+    dfields = [] 
+    mneuts = [0.0, 0.06, 0.10, 0.15, 0.6]
+    for mneut in mneuts: 
+        dfield = mNuCat.mNuDispField_subbox(10, mneut, 1, 2, sim='paco', boundary_correct=True, verbose=True) 
+        dfields.append(dfield)
+
+    #fig = plt.figure(figsize=(5*len(mneuts),5))
+    X, Y = np.meshgrid(np.arange(dfield['dispfield'].shape[1]), np.arange(dfield['dispfield'].shape[2]))
+    for i, dfield in enumerate(dfields): 
+        fig = plt.figure(figsize=(5,5))
+        sub = fig.add_subplot(111)
+        #sub = fig.add_subplot(1,len(mneuts),i+1)
+        print('%f < d_x < %f' % 
+                (dfield['dispfield'][0,:,:,10].min(), dfield['dispfield'][0,:,:,10].max()))
+        print('%f < d_y < %f' % 
+                (dfield['dispfield'][1,:,:,10].min(), dfield['dispfield'][1,:,:,10].max()))
+        sub.quiver(X, Y, dfield['dispfield'][0,:,:,10], dfield['dispfield'][1,:,:,10], 
+                label=(r'$\sum m_\nu = $ %f eV' % mneuts[i])) 
+        sub.set_xlabel('X', fontsize=25) 
+        sub.set_xlim([0., dfield['dispfield'].shape[1]])
+        sub.set_ylabel('Y', fontsize=25) 
+        sub.set_ylim([0., dfield['dispfield'].shape[2]])
+        #sub.set_title(r'$i_z =$ %i' % (10*i), fontsize=20) 
+        sub.set_title(r'$\sum m_\nu = $ %f eV' % round(mneuts[i],2), fontsize=20) 
+        fig.savefig(''.join([UT.fig_dir(), '_mNuDispField_subbox_mneut', str(round(mneuts[i],2)), '.png']), 
+                bbox_inches='tight') 
+    return None
+
+
+def _mNuDispField_subbox(): 
+    '''
+    '''
+    dfield = mNuCat.mNuDispField_subbox(1, 0.0, 1, 2, sim='paco', boundary_correct=True, verbose=True) 
+    fig = plt.figure(figsize=(15,5))
+    X, Y = np.meshgrid(np.arange(dfield['dispfield'].shape[1]), np.arange(dfield['dispfield'].shape[2]))
+    for i in range(3): 
+        sub = fig.add_subplot(1,3,i+1)
+        print('%f < d_x < %f' % 
+                (dfield['dispfield'][0,:,:,10*i].min(), dfield['dispfield'][0,:,:,10*i].max()))
+        print('%f < d_y < %f' % 
+                (dfield['dispfield'][1,:,:,10*i].min(), dfield['dispfield'][1,:,:,10*i].max()))
+        sub.quiver(X, Y, dfield['dispfield'][0,:,:,10*i], dfield['dispfield'][1,:,:,10*i]) 
+        sub.set_xlabel('X', fontsize=25) 
+        sub.set_xlim([0., dfield['dispfield'].shape[1]])
+        if i == 0: sub.set_ylabel('Y', fontsize=25) 
+        sub.set_ylim([0., dfield['dispfield'].shape[2]])
+        sub.set_title(r'$i_z =$ %i' % (10*i), fontsize=20) 
+    fig.savefig(''.join([UT.fig_dir(), '_mNuDispField_subbox.png']), bbox_inches='tight') 
+    return None
+
+
+def _mNuParticles_subbox_mneut(): 
+    '''check that the function mnucosmomap.catalogs.mNuParticles_subbox is 
+    properly reading in the snapshot particles 
+    '''
+    subboxes = [] 
+    mneuts = [0.0, 0.06, 0.10, 0.15, 0.6]
+    for mneut in mneuts: 
+        subbox = mNuCat.mNuParticles_subbox(1, mneut, 1, 2, sim='paco', nside=8, overwrite=False, verbose=False) 
+        subboxes.append(subbox)
+    
+    # read in the particles
+    ics = mNuCat.mNuICs(1, sim='paco', overwrite=False, verbose=False)
+    subb = mNuCat.mNuICs_subbox(1, 1, sim='paco', nside=8, verbose=False)
+    sub_shape = subb['ID'].shape
+    sub_id = subb['ID'].flatten()
+
+    isort_ics = np.argsort(ics['ID']) 
+
+    ics_subbox = {}  
+    ics_subbox['Position'] = np.array([
+        ics['Position'][:,0][isort_ics][(sub_id-1).astype('int')],
+        ics['Position'][:,1][isort_ics][(sub_id-1).astype('int')],
+        ics['Position'][:,2][isort_ics][(sub_id-1).astype('int')]]) 
+    for i in range(3): 
+        print('%i : %f - %f' % (i, ics_subbox['Position'][:,i].min(), ics_subbox['Position'][:,i].max()))
+
+    # now run some common sense checks 
+    for i, subbox in enumerate(subboxes): 
+        print('subbox %i' % i)
+        for ii in range(3): 
+            print(subbox['Position'].shape) 
+            print('%i : %f - %f' % (ii, subbox['Position'][:,ii].min(), subbox['Position'][:,ii].max()))
+        fig = plt.figure(figsize=(5,5))
+        sub = fig.add_subplot(111)
+        sub.scatter(ics_subbox['Position'][:,0], ics_subbox['Position'][:,1], c='k', s=1) 
+        sub.scatter(subbox['Position'][:,0], subbox['Position'][:,1], c='C1', s=1) 
+        sub.set_xlabel('X', fontsize=20) 
+        sub.set_xlim([0., 1000.]) 
+        sub.set_ylabel('Y', fontsize=20) 
+        sub.set_ylim([0., 1000.]) 
+        sub.set_title(r'$\sum m_\nu = $ %f eV' % round(mneuts[i],2), fontsize=20) 
+        fig.savefig(''.join([UT.fig_dir(), '_mNuParticles_subbox_mneut', str(round(mneuts[i],2)), '.png']), 
+                bbox_inches='tight') 
+    return None 
+
+
 def _mNuParticles_subbox(): 
     '''check that the function mnucosmomap.catalogs.mNuParticles_subbox is 
     properly reading in the snapshot particles 
@@ -151,37 +251,15 @@ def _mNuICs():
     return None 
 
 
-def _mNuDispField_subbox(): 
-    '''
-    '''
-    dfield = mNuCat.mNuDispField_subbox(1, 0.0, 1, 2, sim='paco', boundary_correct=True, verbose=True) 
-    fig = plt.figure(figsize=(15,5))
-    X, Y = np.meshgrid(np.arange(dfield['dispfield'].shape[1]), np.arange(dfield['dispfield'].shape[2]))
-    for i in range(3): 
-        sub = fig.add_subplot(1,3,i+1)
-        print('%f < d_x < %f' % 
-                (dfield['dispfield'][0,:,:,10*i].min(), dfield['dispfield'][0,:,:,10*i].max()))
-        print('%f < d_y < %f' % 
-                (dfield['dispfield'][1,:,:,10*i].min(), dfield['dispfield'][1,:,:,10*i].max()))
-        sub.quiver(X, Y, dfield['dispfield'][0,:,:,10*i], dfield['dispfield'][1,:,:,10*i]) 
-        sub.set_xlabel('X', fontsize=25) 
-        sub.set_xlim([0., dfield['dispfield'].shape[1]])
-        if i == 0: sub.set_ylabel('Y', fontsize=25) 
-        sub.set_ylim([0., dfield['dispfield'].shape[2]])
-        sub.set_title(r'$i_z =$ %i' % (10*i), fontsize=20) 
-    fig.savefig(''.join([UT.fig_dir(), '_mNuDispField_subbox.png']), bbox_inches='tight') 
-    return None
-
-
-def _mNuDispField(): 
+def _mNuDispField(mneut, nreal): 
     ''' Check that the displacement fields are properly calculated.  
     '''
-    dfield = mNuCat.mNuDispField(0.0, 1, 2, boundary_correct=False, sim='paco', verbose=False) 
+    dfield = mNuCat.mNuDispField(mneut, nreal, 2, boundary_correct=False, sim='paco', verbose=False) 
     print('%i objects with cross boundary displacements' % np.sum(np.abs(dfield['dispfield']) > 900.))
     print('they account for %f of all the objects' % 
             (float(np.sum(np.abs(dfield['dispfield']) > 900.))/float(len(dfield['ID']))))
 
-    dfield_corr = mNuCat.mNuDispField(0.0, 1, 2, boundary_correct=True, sim='paco', verbose=False) 
+    dfield_corr = mNuCat.mNuDispField(mneut, nreal, 2, boundary_correct=True, sim='paco', verbose=False) 
 
     #crossbound = (np.abs(dfield['dispfield']) > 250.)
     #crossbound_corr = (np.abs(dfield_corr['dispfield']) > 250.)
@@ -200,7 +278,9 @@ def _mNuDispField():
  
 
 if __name__=="__main__": 
-    _mNuDispField_subbox()
+    _mNuParticles_subbox_mneut() 
+    #_mNuDispField_subbox_mneut()
+    #_mNuDispField_subbox()
     #_mNuDispField()
     #_mNuICs_subbox()
     #_mNuICs()

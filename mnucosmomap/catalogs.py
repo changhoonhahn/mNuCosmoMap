@@ -13,7 +13,8 @@ from mnucosmomap import util as UT
 from mnucosmomap import readsnap as ReadSnap
 
 
-def mNuParticles_subbox(mneut, nreal, nzbin, nsubbox, sim='paco', nside=8, overwrite=False, verbose=False): 
+def mNuParticles_subbox(nsubbox, mneut, nreal, nzbin, sim='paco', nside=8, 
+        overwrite=False, verbose=False): 
     ''' Read in (and write out if it doesn't exist) subbox of snapshots generated from 
     '''
     if verbose: print('reading in %i of %i^3 subboxes' % (nsubbox, nside)) 
@@ -43,34 +44,29 @@ def mNuParticles_subbox(mneut, nreal, nzbin, nsubbox, sim='paco', nside=8, overw
 
     else: # write file 
         fullbox = mNuParticles(mneut, nreal, nzbin, sim='paco', verbose=verbose) # read in full box
+        isort_box = np.argsort(fullbox['ID'])
+        # read in subbox indicies
+        subb = mNuICs_subbox(nreal, nsubbox, sim=sim, nside=nside, verbose=verbose)
+        sub_shape = subb['ID'].shape
+        sub_id = subb['ID'].flatten()
 
-        # append extra metadata
-        fullbox['meta']['n_side'] = nside
-        fullbox['meta']['n_subbox'] = nsubbox
-
-        x, y, z = fullbox['Position'].T
-
-        L_subbox = 1000. / float(nside) # L_subbox
-
-        i_x = ((nsubbox % nside**2) % nside) 
-        i_y = ((nsubbox % nside**2) // nside) 
-        i_z = (nsubbox // nside**2) 
-
-        xlim = (x >= L_subbox * float(i_x)) & (x < L_subbox * float(i_x + 1))
-        ylim = (y >= L_subbox * float(i_y)) & (y < L_subbox * float(i_y + 1))
-        zlim = (z >= L_subbox * float(i_z)) & (z < L_subbox * float(i_z + 1))
-    
         subbox = {}  
         subbox['meta'] = fullbox['meta'].copy() 
-
+        subbox['meta']['n_side'] = nside # append extra metadata
+        subbox['meta']['n_subbox'] = nsubbox
+        subbox['ID'] = sub_id  
+        for k in ['Position', 'Velocity']: 
+            subbox[k] = np.array([
+                fullbox[k][:,0][isort_box][(sub_id - 1).astype('int')], 
+                fullbox[k][:,1][isort_box][(sub_id - 1).astype('int')], 
+                fullbox[k][:,2][isort_box][(sub_id - 1).astype('int')]])
+    
         fsub = h5py.File(f, 'w') # save to hdf5 file 
-        for k in fullbox.keys(): 
-            if k == 'meta': continue 
-            subbox[k] = fullbox[k][xlim & ylim & zlim]
+        for k in ['ID', 'Position', 'Velocity']:  
             fsub.create_dataset(k, data=subbox[k]) 
 
         for k in fullbox['meta'].keys(): # store meta data 
-            fsub.attrs.create(k, fullbox['meta'][k]) 
+            fsub.attrs.create(k, subbox['meta'][k]) 
         fsub.close() 
 
     return subbox 
@@ -102,6 +98,7 @@ def mNuDispField_subbox(nsubbox, mneut, nreal, nzbin, sim='paco', nside=8, bound
             subbox[k] = fsub[k].value 
         fsub.close() 
     else: # write file 
+        if verbose: print('writing %s' % f) 
         # read in displacement of all the particles 
         # (boundary correction is intentionally not applied so that 
         # the code can be modularly improved on)
@@ -168,6 +165,7 @@ def mNuICs_subbox(nreal, nsubbox, sim='paco', nside=8, overwrite=False, verbose=
         fsub.close() 
 
     else: # write file 
+        if verbose: print('writing %s' % f)
         fullbox = mNuICs(nreal, sim='paco', verbose=verbose) # read in full IC 
 
         # append extra metadata
@@ -278,10 +276,11 @@ def mNuDispField(mneut, nreal, nzbin, boundary_correct=True, sim='paco', overwri
         par = mNuParticles(mneut, nreal, nzbin, sim=sim, verbose=verbose)
         # read in initial conditions 
         ics = mNuICs(nreal, sim=sim, verbose=verbose) 
+        assert len(ics['ID']) == len(par['ID']) 
 
         isort_ics = np.argsort(ics['ID']) 
         isort_par = np.argsort(par['ID']) 
-        assert np.array_equal(ics['ID'][isort_ics], par['ID'][isort_par])
+        #assert np.array_equal(ics['ID'][isort_ics], par['ID'][isort_par])
 
         dispfield = {} 
         dispfield['meta'] = par['meta'].copy() 
@@ -310,7 +309,7 @@ def mNuDispField(mneut, nreal, nzbin, boundary_correct=True, sim='paco', overwri
     return dispfield 
 
 
-def mNuParticles(mneut, nreal, nzbin, sim='paco', verbose=False): 
+def mNuParticles(mneut, nreal, nzbin, sim='paco', overwrite=False, verbose=False): 
     ''' Read in snapshot generated from Paco's code 
 
     parameters
@@ -340,26 +339,49 @@ def mNuParticles(mneut, nreal, nzbin, sim='paco', verbose=False):
     _dir = ''.join([UT.dat_dir(), 'sims/paco/', # directory 
         str_mneut, 'eV/', str(nreal), '/snapdir_', str(nzbin).zfill(3), '/'])
     if not os.path.isdir(_dir): raise ValueError("directory %s not found" % _dir)
-    f = ''.join([_dir, 'snap_', str(nzbin).zfill(3)]) # snapshot 
-    #if not os.path.isfile(f): raise ValueError("file %s not found" % f)
+    f = ''.join([_dir, 'snap_', str(nzbin).zfill(3), '.hdf5']) # snapshot 
 
-    # read in Gadget header
-    header = ReadSnap.read_gadget_header(f)
 
-    # read in CDM particles (parttype = 1) and create catalogue
-    read_keys = ['POS ', 'VEL ', 'ID  ', 'MASS'] # currently only reading POS, VEL, ID, and MASS
-    save_keys = ['Position', 'Velocity', 'ID', 'Mass'] 
-    
-    particle_data = {} 
-    particle_data['meta'] = header # store meta data
-    for k_s, k_r in zip(save_keys, read_keys): 
-        particle_data[k_s] = ReadSnap.read_block(f, k_r, parttype=1, verbose=verbose)
-        if k_s == 'Position': 
-            particle_data[k_s] /= 1000. # convert ot Mpc/h 
+    if os.path.isfile(f) and not overwrite: # read in the file 
+        particle_data = {} 
+        
+        f_par = h5py.File(f, 'r') # read in hdf5 file 
+        particle_data['meta'] = {} 
+        for k in f_par.attrs.keys(): 
+            particle_data['meta'][k] = f_par.attrs[k]
+        # read in datasets
+        for k in f_par.keys(): 
+            particle_data[k] = f_par[k].value 
+        f_par.close() 
+
+    else: # write file 
+        f_gadget = ''.join([_dir, 'snap_', str(nzbin).zfill(3)]) # snapshot 
+        # read in Gadget header
+        header = ReadSnap.read_gadget_header(f_gadget)
+
+        # read in CDM particles (parttype = 1) and create catalogue
+        read_keys = ['POS ', 'VEL ', 'ID  ', 'MASS'] # currently only reading POS, VEL, ID, and MASS
+        save_keys = ['Position', 'Velocity', 'ID', 'Mass'] 
+        
+        particle_data = {} 
+        particle_data['meta'] = header # store meta data
+        for k_s, k_r in zip(save_keys, read_keys): 
+            particle_data[k_s] = ReadSnap.read_block(f_gadget, k_r, parttype=1, verbose=verbose)
+            if k_s == 'Position': 
+                particle_data[k_s] /= 1000. # convert ot Mpc/h 
+        
+        f_par = h5py.File(f, 'w') # save ID's to hdf5 file 
+        for k in particle_data.keys(): 
+            if k == 'meta': continue 
+            f_par.create_dataset(k, data=particle_data[k]) 
+
+        for k in particle_data['meta'].keys(): # store meta data 
+            f_par.attrs.create(k, particle_data['meta'][k]) 
+        f_par.close() 
     return particle_data 
 
 
-def mNuICs(nreal, sim='paco', verbose=False): 
+def mNuICs(nreal, sim='paco', overwrite=False, verbose=False): 
     ''' Read in initial condition of  Paco's simulations. According to 
     Paco, each of the realizations (regardless of neutrino mass) should 
     have the same initial conditions. 
@@ -377,20 +399,44 @@ def mNuICs(nreal, sim='paco', verbose=False):
     if sim not in ['paco']: raise NotImplementedError('%s simulation not supported yet') 
     _dir = ''.join([UT.dat_dir(), 'sims/paco/0.0eV/', str(nreal), '/ICs/'])
     if not os.path.isdir(_dir): raise ValueError("directory %s not found" % _dir)
-    f = ''.join([_dir, 'ics']) # snapshot 
+    f = ''.join([_dir, 'ics.hdf5']) # snapshot 
+    #f = ''.join([_dir, 'ics']) # snapshot 
     #if not os.path.isfile(f): raise ValueError("file %s not found" % f)
-
-    # read in Gadget header
-    header = ReadSnap.read_gadget_header(f)
-
-    # read in CDM particles (parttype = 1) and create catalogue
-    read_keys = ['POS ', 'VEL ', 'ID  ', 'MASS'] # currently only reading POS, VEL, ID, and MASS
-    save_keys = ['Position', 'Velocity', 'ID', 'Mass'] 
     
-    particle_data = {} 
-    particle_data['meta'] = header # store meta data
-    for k_s, k_r in zip(save_keys, read_keys): 
-        particle_data[k_s] = ReadSnap.read_block(f, k_r, parttype=1, verbose=verbose)
-        if k_s == 'Position': 
-            particle_data[k_s] /= 1000. # convert ot Mpc/h 
+    if os.path.isfile(f) and not overwrite: # read in the file 
+        particle_data = {} 
+        
+        f_ics = h5py.File(f, 'r') # read in hdf5 file 
+        particle_data['meta'] = {} 
+        for k in f_ics.attrs.keys(): 
+            particle_data['meta'][k] = f_ics.attrs[k]
+        # read in datasets
+        for k in f_ics.keys(): 
+            particle_data[k] = f_ics[k].value 
+        f_ics.close() 
+
+    else: # write file 
+        # read in Gadget header
+        f_gadget = ''.join([_dir, 'ics'])
+        header = ReadSnap.read_gadget_header(f_gadget)
+
+        # read in CDM particles (parttype = 1) and create catalogue
+        read_keys = ['POS ', 'VEL ', 'ID  ', 'MASS'] # currently only reading POS, VEL, ID, and MASS
+        save_keys = ['Position', 'Velocity', 'ID', 'Mass'] 
+        
+        particle_data = {} 
+        particle_data['meta'] = header # store meta data
+        for k_s, k_r in zip(save_keys, read_keys): 
+            particle_data[k_s] = ReadSnap.read_block(f_gadget, k_r, parttype=1, verbose=verbose)
+            if k_s == 'Position': 
+                particle_data[k_s] /= 1000. # convert ot Mpc/h 
+
+        f_ics = h5py.File(f, 'w') # save ID's to hdf5 file 
+        for k in particle_data.keys(): 
+            if k == 'meta': continue 
+            f_ics.create_dataset(k, data=particle_data[k]) 
+
+        for k in particle_data['meta'].keys(): # store meta data 
+            f_ics.attrs.create(k, particle_data['meta'][k]) 
+        f_ics.close() 
     return particle_data 
