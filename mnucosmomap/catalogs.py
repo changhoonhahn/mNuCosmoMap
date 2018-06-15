@@ -16,6 +16,8 @@ from mnucosmomap import readsnap as ReadSnap
 def mNuParticles_subbox(nsubbox, mneut, nreal, nzbin, sim='paco', nside=8, 
         overwrite=False, verbose=False): 
     ''' Read in (and write out if it doesn't exist) subbox of snapshots generated from 
+    Paco's neutrino simulations. The positions and velocity of the CDM particles
+    have dimensions 3xNxNxN
     '''
     if verbose: print('reading in %i of %i^3 subboxes' % (nsubbox, nside)) 
     if nsubbox > nside**3: 
@@ -43,23 +45,25 @@ def mNuParticles_subbox(nsubbox, mneut, nreal, nzbin, sim='paco', nside=8,
         fsub.close() 
 
     else: # write file 
-        fullbox = mNuParticles(mneut, nreal, nzbin, sim='paco', verbose=verbose) # read in full box
+        print('Constructing %s ......' % f) 
+         # read in full box of Particles
+        fullbox = mNuParticles(mneut, nreal, nzbin, sim='paco', verbose=verbose)
         isort_box = np.argsort(fullbox['ID'])
         # read in subbox indicies
         subb = mNuICs_subbox(nreal, nsubbox, sim=sim, nside=nside, verbose=verbose)
-        sub_shape = subb['ID'].shape
+        N_partside, N_partside, N_partside = subb['ID'].shape
         sub_id = subb['ID'].flatten()
 
         subbox = {}  
         subbox['meta'] = fullbox['meta'].copy() 
         subbox['meta']['n_side'] = nside # append extra metadata
         subbox['meta']['n_subbox'] = nsubbox
-        subbox['ID'] = sub_id  
+        subbox['ID'] = subb['ID'].copy()  
         for k in ['Position', 'Velocity']: 
-            subbox[k] = np.array([
-                fullbox[k][:,0][isort_box][(sub_id - 1).astype('int')], 
-                fullbox[k][:,1][isort_box][(sub_id - 1).astype('int')], 
-                fullbox[k][:,2][isort_box][(sub_id - 1).astype('int')]])
+            subbox[k] = np.zeros((3, N_partside, N_partside, N_partside)) 
+            for i in range(3): 
+                subbox[k][i,:,:,:] = \
+                        fullbox[k][:,i][isort_box][(sub_id - 1).astype('int')].reshape((N_partside, N_partside, N_partside))
     
         fsub = h5py.File(f, 'w') # save to hdf5 file 
         for k in ['ID', 'Position', 'Velocity']:  
@@ -98,43 +102,34 @@ def mNuDispField_subbox(nsubbox, mneut, nreal, nzbin, sim='paco', nside=8, bound
             subbox[k] = fsub[k].value 
         fsub.close() 
     else: # write file 
-        if verbose: print('writing %s' % f) 
+        print('Constructing %s ......' % f) 
         # read in displacement of all the particles 
-        # (boundary correction is intentionally not applied so that 
-        # the code can be modularly improved on)
-        dispfield = mNuDispField(mneut, nreal, nzbin, sim=sim, boundary_correct=False,
-                overwrite=overwrite, verbose=verbose)
+        subpar = mNuParticles_subbox(nsubbox, mneut, nreal, nzbin, sim=sim, nside=nside, verbose=verbose) 
         # read in subbox indicies
-        subb = mNuICs_subbox(nreal, nsubbox, sim=sim, nside=nside, verbose=verbose)
-        sub_shape = subb['ID'].shape
-        sub_id = subb['ID'].flatten()
+        subics = mNuICs_subbox(nreal, nsubbox, sim=sim, nside=nside, verbose=verbose)
 
         subbox = {}  
-        subbox['meta'] = dispfield['meta'].copy() 
-        subbox['ID'] = sub_id  
-        subbox['dispfield'] = np.array([
-            dispfield['dispfield'][:,0][(sub_id - 1).astype('int')].reshape(sub_shape), 
-            dispfield['dispfield'][:,1][(sub_id - 1).astype('int')].reshape(sub_shape), 
-            dispfield['dispfield'][:,2][(sub_id - 1).astype('int')].reshape(sub_shape)])
-        if verbose: print(subbox['dispfield'].shape)
+        subbox['meta'] = subpar['meta'].copy() 
+        subbox['ID'] = subics['ID'].copy()  
+        subbox['DispField'] = subpar['Position'] - subics['Position']
 
         fsub = h5py.File(f, 'w') # save ID's to hdf5 file 
-        for k in dispfield['meta'].keys(): # store meta data 
-            fsub.attrs.create(k, dispfield['meta'][k]) 
+        for k in subbox['meta'].keys(): # store meta data 
+            fsub.attrs.create(k, subbox['meta'][k]) 
         fsub.create_dataset('ID', data=subbox['ID']) 
-        fsub.create_dataset('dispfield', data=subbox['dispfield']) 
+        fsub.create_dataset('DispField', data=subbox['DispField']) 
         fsub.close() 
 
     if boundary_correct: 
         # correct for the cases where particles cross the periodic boundaries 
         # the correction at the moment is brute forced. 
         for i in range(3): 
-            cross_neg = (subbox['dispfield'][i,:,:,:].flatten() < -900.) 
-            subbox['dispfield'][i,cross_neg.reshape(subbox['dispfield'].shape[1:])] += 1000.
+            cross_neg = (subbox['DispField'][i,:,:,:].flatten() < -900.) 
+            subbox['DispField'][i,cross_neg.reshape(subbox['DispField'].shape[1:])] += 1000.
             
-            cross_pos = (subbox['dispfield'][i,:,:,:].flatten() > 900.) 
-            subbox['dispfield'][i,cross_pos.reshape(subbox['dispfield'].shape[1:])] = \
-                    1000. - subbox['dispfield'][i,cross_pos.reshape(subbox['dispfield'].shape[1:])]
+            cross_pos = (subbox['DispField'][i,:,:,:].flatten() > 900.) 
+            subbox['DispField'][i,cross_pos.reshape(subbox['DispField'].shape[1:])] = \
+                    1000. - subbox['DispField'][i,cross_pos.reshape(subbox['DispField'].shape[1:])]
     return subbox
 
 
@@ -173,6 +168,7 @@ def mNuICs_subbox(nreal, nsubbox, sim='paco', nside=8, overwrite=False, verbose=
         fullbox['meta']['n_subbox'] = nsubbox
 
         x, y, z = fullbox['Position'].T
+        vx, vy, vz = fullbox['Velocity'].T
 
         L_subbox = 1000. / float(nside) # L_subbox
         L_res = 1000./512.
@@ -194,14 +190,23 @@ def mNuICs_subbox(nreal, nsubbox, sim='paco', nside=8, overwrite=False, verbose=
         assert np.sum(in_subbox) == N_subbox
         
         ID_sub = fullbox['ID'][in_subbox]
-        x_sub = x[in_subbox] - i_x * L_subbox
-        y_sub = y[in_subbox] - i_y * L_subbox
-        z_sub = z[in_subbox] - i_z * L_subbox
+        x_subbox = x[in_subbox]
+        y_subbox = y[in_subbox]
+        z_subbox = z[in_subbox]
+        x_sub = x_subbox - i_x * L_subbox
+        y_sub = y_subbox - i_y * L_subbox
+        z_sub = z_subbox - i_z * L_subbox
+
+        vx_subbox = vx[in_subbox]
+        vy_subbox = vy[in_subbox]
+        vz_subbox = vz[in_subbox]
         if verbose: 
             print('%f < x_sub < %f' % (x_sub.min(), x_sub.max()))
             print('%f < y_sub < %f' % (y_sub.min(), y_sub.max()))
             print('%f < z_sub < %f' % (z_sub.min(), z_sub.max()))
         subbox_ID = np.zeros((N_partside, N_partside, N_partside))
+        subbox_pos = np.zeros((3, N_partside, N_partside, N_partside))
+        subbox_vel = np.zeros((3, N_partside, N_partside, N_partside))
         for j_z in range(N_partside): 
             #print('j_z = %i , %f < z < %f' % (j_z, L_res* float(j_z) + L_halfres, L_res * float(j_z + 1) + L_halfres))
             zlim_sub = ((z_sub > L_res* float(j_z) + L_halfres) & 
@@ -213,17 +218,25 @@ def mNuICs_subbox(nreal, nsubbox, sim='paco', nside=8, overwrite=False, verbose=
                 for j_x in range(N_partside): 
                     j_x_sorted = np.argsort(x_sub[ylim_sub & zlim_sub])
                     subbox_ID[:,j_y,j_z] = ID_sub[ylim_sub & zlim_sub][j_x_sorted]
-    
+                    subbox_pos[0,:,j_y,j_z] = x_subbox[ylim_sub & zlim_sub][j_x_sorted]
+                    subbox_pos[1,:,j_y,j_z] = y_subbox[ylim_sub & zlim_sub][j_x_sorted]
+                    subbox_pos[2,:,j_y,j_z] = z_subbox[ylim_sub & zlim_sub][j_x_sorted]
+                    subbox_vel[0,:,j_y,j_z] = vx_subbox[ylim_sub & zlim_sub][j_x_sorted]
+                    subbox_vel[1,:,j_y,j_z] = vy_subbox[ylim_sub & zlim_sub][j_x_sorted]
+                    subbox_vel[2,:,j_y,j_z] = vz_subbox[ylim_sub & zlim_sub][j_x_sorted]
         subbox = {}  
         subbox['meta'] = fullbox['meta'].copy() 
         subbox['ID'] = subbox_ID
+        subbox['Position'] = subbox_pos
+        subbox['Velocity'] = subbox_vel
 
         fsub = h5py.File(f, 'w') # save ID's to hdf5 file 
         for k in fullbox['meta'].keys(): # store meta data 
             fsub.attrs.create(k, fullbox['meta'][k]) 
         fsub.create_dataset('ID', data=subbox['ID']) 
+        fsub.create_dataset('Position', data=subbox['Position']) 
+        fsub.create_dataset('Velocity', data=subbox['Velocity']) 
         fsub.close() 
-
     return subbox 
 
 
@@ -272,6 +285,7 @@ def mNuDispField(mneut, nreal, nzbin, boundary_correct=True, sim='paco', overwri
         fdisp.close() 
 
     else: # write file 
+        print('Constructing %s ......' % f) 
         # read in particles of snapshot 
         par = mNuParticles(mneut, nreal, nzbin, sim=sim, verbose=verbose)
         # read in initial conditions 

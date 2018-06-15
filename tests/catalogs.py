@@ -28,29 +28,32 @@ def _mNuDispField_subbox_mneut():
     '''
     '''
     dfields = [] 
+    ics = [] 
     mneuts = [0.0, 0.06, 0.10, 0.15, 0.6]
     for mneut in mneuts: 
-        dfield = mNuCat.mNuDispField_subbox(10, mneut, 1, 2, sim='paco', boundary_correct=True, verbose=True) 
-        dfields.append(dfield)
+        dfield = mNuCat.mNuDispField_subbox(1, mneut, 1, 2, sim='paco', boundary_correct=True, overwrite=True, verbose=True) 
+        dfields.append(dfield) 
+        ics_subbox = mNuCat.mNuICs_subbox(1, 1, sim='paco', verbose=False)
+        ics.append(ics_subbox)
 
-    #fig = plt.figure(figsize=(5*len(mneuts),5))
-    X, Y = np.meshgrid(np.arange(dfield['dispfield'].shape[1]), np.arange(dfield['dispfield'].shape[2]))
-    for i, dfield in enumerate(dfields): 
-        fig = plt.figure(figsize=(5,5))
-        sub = fig.add_subplot(111)
-        #sub = fig.add_subplot(1,len(mneuts),i+1)
-        print('%f < d_x < %f' % 
-                (dfield['dispfield'][0,:,:,10].min(), dfield['dispfield'][0,:,:,10].max()))
-        print('%f < d_y < %f' % 
-                (dfield['dispfield'][1,:,:,10].min(), dfield['dispfield'][1,:,:,10].max()))
-        sub.quiver(X, Y, dfield['dispfield'][0,:,:,10], dfield['dispfield'][1,:,:,10], 
-                label=(r'$\sum m_\nu = $ %f eV' % mneuts[i])) 
-        sub.set_xlabel('X', fontsize=25) 
-        sub.set_xlim([0., dfield['dispfield'].shape[1]])
-        sub.set_ylabel('Y', fontsize=25) 
-        sub.set_ylim([0., dfield['dispfield'].shape[2]])
-        #sub.set_title(r'$i_z =$ %i' % (10*i), fontsize=20) 
-        sub.set_title(r'$\sum m_\nu = $ %f eV' % round(mneuts[i],2), fontsize=20) 
+    for i, dfield, ic in zip(range(len(mneuts)), dfields, ics): 
+        fig = plt.figure(figsize=(15,5))
+        for ii in range(3):
+            sub = fig.add_subplot(1,3,ii+1)
+            print('%f < d_x < %f' % 
+                    (dfield['DispField'][0,:,:,10].min(), dfield['DispField'][0,:,:,10].max()))
+            print('%f < d_y < %f' % 
+                    (dfield['DispField'][1,:,:,10].min(), dfield['DispField'][1,:,:,10].max()))
+
+            sub.quiver(ic['Position'][0,:,:,5*ii], ic['Position'][1,:,:,5*ii],
+                    dfield['DispField'][0,:,:,5*ii], dfield['DispField'][1,:,:,5*ii], 
+                    scale=1, scale_units='xy')
+
+            sub.set_xlabel('X', fontsize=20) 
+            sub.set_xlim([120., 255.]) 
+            if ii == 0: sub.set_ylabel('Y', fontsize=20) 
+            sub.set_ylim([-0.5, 130.]) 
+            if ii == 1: sub.set_title(r'$\sum m_\nu = $ %f eV' % round(mneuts[i],2), fontsize=20) 
         fig.savefig(''.join([UT.fig_dir(), '_mNuDispField_subbox_mneut', str(round(mneuts[i],2)), '.png']), 
                 bbox_inches='tight') 
     return None
@@ -59,20 +62,25 @@ def _mNuDispField_subbox_mneut():
 def _mNuDispField_subbox(): 
     '''
     '''
-    dfield = mNuCat.mNuDispField_subbox(1, 0.0, 1, 2, sim='paco', boundary_correct=True, verbose=True) 
+    subbox = mNuCat.mNuParticles_subbox(1, 0.0, 1, 2, sim='paco', nside=8, verbose=False) 
+    ics_subbox = mNuCat.mNuICs_subbox(1, 1, sim='paco', nside=8, verbose=False)
+    dfield = mNuCat.mNuDispField_subbox(1, 0.0, 1, 2, sim='paco', boundary_correct=False, verbose=True) 
+
     fig = plt.figure(figsize=(15,5))
-    X, Y = np.meshgrid(np.arange(dfield['dispfield'].shape[1]), np.arange(dfield['dispfield'].shape[2]))
+    #X, Y = np.meshgrid(np.arange(dfield['dispfield'].shape[1]), np.arange(dfield['dispfield'].shape[2]))
     for i in range(3): 
         sub = fig.add_subplot(1,3,i+1)
-        print('%f < d_x < %f' % 
-                (dfield['dispfield'][0,:,:,10*i].min(), dfield['dispfield'][0,:,:,10*i].max()))
-        print('%f < d_y < %f' % 
-                (dfield['dispfield'][1,:,:,10*i].min(), dfield['dispfield'][1,:,:,10*i].max()))
-        sub.quiver(X, Y, dfield['dispfield'][0,:,:,10*i], dfield['dispfield'][1,:,:,10*i]) 
+        #sub.quiver(X, Y, dfield['dispfield'][0,:,:,10*i], dfield['dispfield'][1,:,:,10*i]) 
+        sub.scatter(subbox['Position'][0,:,:,5*i], subbox['Position'][1,:,:,5*i], 
+                c='C0', s=0.4) 
+        sub.scatter(
+                ics_subbox['Position'][0,:,:,5*i] + dfield['DispField'][0,:,:,5*i], 
+                ics_subbox['Position'][1,:,:,5*i] + dfield['DispField'][1,:,:,5*i],  
+                c='C1', s=0.2) 
         sub.set_xlabel('X', fontsize=25) 
-        sub.set_xlim([0., dfield['dispfield'].shape[1]])
-        if i == 0: sub.set_ylabel('Y', fontsize=25) 
-        sub.set_ylim([0., dfield['dispfield'].shape[2]])
+        sub.set_xlim([120., 255.]) 
+        if i == 0: sub.set_ylabel('Y', fontsize=20) 
+        sub.set_ylim([-0.5, 130.]) 
         sub.set_title(r'$i_z =$ %i' % (10*i), fontsize=20) 
     fig.savefig(''.join([UT.fig_dir(), '_mNuDispField_subbox.png']), bbox_inches='tight') 
     return None
@@ -85,40 +93,38 @@ def _mNuParticles_subbox_mneut():
     subboxes = [] 
     mneuts = [0.0, 0.06, 0.10, 0.15, 0.6]
     for mneut in mneuts: 
-        subbox = mNuCat.mNuParticles_subbox(1, mneut, 1, 2, sim='paco', nside=8, overwrite=False, verbose=False) 
+        subbox = mNuCat.mNuParticles_subbox(1, mneut, 1, 2, sim='paco', nside=8, 
+                overwrite=False, verbose=False) 
         subboxes.append(subbox)
     
-    # read in the particles
-    ics = mNuCat.mNuICs(1, sim='paco', overwrite=False, verbose=False)
-    subb = mNuCat.mNuICs_subbox(1, 1, sim='paco', nside=8, verbose=False)
-    sub_shape = subb['ID'].shape
-    sub_id = subb['ID'].flatten()
+    ics_subbox = mNuCat.mNuICs_subbox(1, 1, sim='paco', nside=8, overwrite=False, verbose=False)
 
-    isort_ics = np.argsort(ics['ID']) 
-
-    ics_subbox = {}  
-    ics_subbox['Position'] = np.array([
-        ics['Position'][:,0][isort_ics][(sub_id-1).astype('int')],
-        ics['Position'][:,1][isort_ics][(sub_id-1).astype('int')],
-        ics['Position'][:,2][isort_ics][(sub_id-1).astype('int')]]) 
     for i in range(3): 
-        print('%i : %f - %f' % (i, ics_subbox['Position'][:,i].min(), ics_subbox['Position'][:,i].max()))
+        print('%i : %f - %f' % (i, 
+            ics_subbox['Position'][i,:,:,:].flatten().min(), 
+            ics_subbox['Position'][i,:,:,:].flatten().max()))
 
-    # now run some common sense checks 
     for i, subbox in enumerate(subboxes): 
         print('subbox %i' % i)
         for ii in range(3): 
-            print(subbox['Position'].shape) 
-            print('%i : %f - %f' % (ii, subbox['Position'][:,ii].min(), subbox['Position'][:,ii].max()))
-        fig = plt.figure(figsize=(5,5))
-        sub = fig.add_subplot(111)
-        sub.scatter(ics_subbox['Position'][:,0], ics_subbox['Position'][:,1], c='k', s=1) 
-        sub.scatter(subbox['Position'][:,0], subbox['Position'][:,1], c='C1', s=1) 
-        sub.set_xlabel('X', fontsize=20) 
-        sub.set_xlim([0., 1000.]) 
-        sub.set_ylabel('Y', fontsize=20) 
-        sub.set_ylim([0., 1000.]) 
-        sub.set_title(r'$\sum m_\nu = $ %f eV' % round(mneuts[i],2), fontsize=20) 
+            print('%i : %f - %f' % (ii, 
+                ics_subbox['Position'][ii,:,:,:].flatten().min(), 
+                ics_subbox['Position'][ii,:,:,:].flatten().max()))
+            print('%i : %f - %f' % (ii, 
+                subbox['Position'][ii,:,:,:].flatten().min(), 
+                subbox['Position'][ii,:,:,:].flatten().max()))
+        fig = plt.figure(figsize=(15,5))
+        for ii in range(3): 
+            sub = fig.add_subplot(1,3,ii+1)
+            sub.scatter(ics_subbox['Position'][0,:,:,5*ii], ics_subbox['Position'][1,:,:,5*ii], 
+                    c='k', s=0.2) 
+            sub.scatter(subbox['Position'][0,:,:,5*ii], subbox['Position'][1,:,:,5*ii], 
+                    c='C1', s=0.2) 
+            sub.set_xlabel('X', fontsize=20) 
+            sub.set_xlim([120., 255.]) 
+            if ii == 0: sub.set_ylabel('Y', fontsize=20) 
+            sub.set_ylim([-0.5, 130.]) 
+            if ii == 1: sub.set_title(r'$\sum m_\nu = $ %f eV' % round(mneuts[i],2), fontsize=20) 
         fig.savefig(''.join([UT.fig_dir(), '_mNuParticles_subbox_mneut', str(round(mneuts[i],2)), '.png']), 
                 bbox_inches='tight') 
     return None 
@@ -279,7 +285,7 @@ def _mNuDispField(mneut, nreal):
 
 if __name__=="__main__": 
     _mNuParticles_subbox_mneut() 
-    #_mNuDispField_subbox_mneut()
+    _mNuDispField_subbox_mneut()
     #_mNuDispField_subbox()
     #_mNuDispField()
     #_mNuICs_subbox()
