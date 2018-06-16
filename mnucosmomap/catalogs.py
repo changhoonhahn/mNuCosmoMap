@@ -161,7 +161,6 @@ def mNuICs_subbox(nsubbox, nreal, sim='paco', nside=8, overwrite=False, verbose=
         Nsub = 1 
         nsubbox = [nsubbox]
     for isubbox in nsubbox: 
-        if verbose: print('reading in %i of %i^3 subboxes' % (isubbox, nside)) 
         if isubbox > nside**3: raise ValueError('%i exceeds number of subboxes specifed' % isubbox) 
     if sim not in ['paco']: raise NotImplementedError('%s simulation not supported yet') 
 
@@ -173,6 +172,7 @@ def mNuICs_subbox(nsubbox, nreal, sim='paco', nside=8, overwrite=False, verbose=
     for isubbox in nsubbox: 
         subbox = {} 
         if os.path.isfile(F(isubbox)) and not overwrite: # read in the file 
+            if verbose: print('reading in %i of %i^3 subboxes' % (isubbox, nside)) 
             fsub = h5py.File(F(isubbox), 'r') # read in hdf5 file 
             subbox['meta'] = {} 
             for k in fsub.attrs.keys(): 
@@ -182,7 +182,7 @@ def mNuICs_subbox(nsubbox, nreal, sim='paco', nside=8, overwrite=False, verbose=
                 subbox[k] = fsub[k].value 
             fsub.close() 
         else: # write file 
-            print('Constructing %s ......' % F(isubbox)) 
+            if verbose: print('Constructing %s ......' % F(isubbox)) 
             if isubbox == nsubbox[0]: # read in full IC 
                 fullbox = mNuICs(nreal, sim=sim, verbose=verbose)
                 # append extra metadata
@@ -201,15 +201,20 @@ def mNuICs_subbox(nsubbox, nreal, sim='paco', nside=8, overwrite=False, verbose=
             i_x = ((isubbox % nside**2) % nside) 
             i_y = ((isubbox % nside**2) // nside) 
             i_z = (isubbox // nside**2) 
+            if verbose: print('%i, %i, %i' % (i_x, i_y, i_z))
 
-            xlim = ((x > L_subbox * float(i_x) + L_halfres) & 
+            xlim = ((x >= L_subbox * float(i_x) + L_halfres) & 
                     (x < L_subbox * float(i_x + 1) + L_halfres))
-            ylim = ((y > L_subbox * float(i_y) + L_halfres) & 
+            ylim = ((y >= L_subbox * float(i_y) + L_halfres) & 
                     (y < L_subbox * float(i_y + 1) + L_halfres))
-            zlim = ((z > L_subbox * float(i_z) + L_halfres) & 
+            zlim = ((z >= L_subbox * float(i_z) + L_halfres) & 
                     (z < L_subbox * float(i_z + 1) + L_halfres)) 
             in_subbox = (xlim & ylim & zlim)
-            assert np.sum(in_subbox) == N_subbox
+            #assert np.sum(in_subbox) == N_subbox
+            if np.sum(in_subbox) != N_subbox: 
+                print('%i particles in the box limits' % np.sum(in_subbox)) 
+                print('while there should be %i' % N_subbox)
+                raise ValueError
             
             ID_sub = fullbox['ID'][in_subbox]
             x_subbox = x[in_subbox]
