@@ -15,6 +15,16 @@ def check_env():
     return None
 
 
+def mNuDir(mneut, sim='paco'): 
+    ''' Directory where massive neutrino simulations are 
+    '''
+    if mneut == 0.1: 
+        str_mneut = '0.10'
+    else: 
+        str_mneut = str(mneut) 
+    return ''.join([dat_dir(), 'sims/', sim, '/', str_mneut, 'eV/'])
+
+
 def dat_dir(): 
     ''' directory that contains all the data files, defined by environment 
     variable $IQUENCH_DIR
