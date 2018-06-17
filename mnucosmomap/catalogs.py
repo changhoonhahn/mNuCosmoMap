@@ -203,18 +203,20 @@ def mNuICs_subbox(nsubbox, nreal, sim='paco', nside=8, overwrite=False, verbose=
             i_z = (isubbox // nside**2) 
             if verbose: print('%i, %i, %i' % (i_x, i_y, i_z))
 
-            xlim = ((x >= L_subbox * float(i_x) + L_halfres) & 
-                    (x < L_subbox * float(i_x + 1) + L_halfres))
-            ylim = ((y >= L_subbox * float(i_y) + L_halfres) & 
-                    (y < L_subbox * float(i_y + 1) + L_halfres))
-            zlim = ((z >= L_subbox * float(i_z) + L_halfres) & 
-                    (z < L_subbox * float(i_z + 1) + L_halfres)) 
+            xmin = L_subbox * float(i_x) + L_halfres
+            xmax = (L_subbox * float(i_x+1) + L_halfres) % 1000.
+            ymin = L_subbox * float(i_y) + L_halfres
+            ymax = (L_subbox * float(i_y+1) + L_halfres) % 1000.
+            zmin = L_subbox * float(i_z) + L_halfres
+            zmax = (L_subbox * float(i_z+1) + L_halfres) % 1000.
+            if xmin >= xmax: xlim = ((x >= xmin) & (x < xmax))
+            else: xlim = ((x >= xmin) | (x < xmax))
+            if ymin >= ymax: ylim = ((y >= ymin) & (y < ymax))
+            else: ylim = ((y >= ymin) | (y < ymax))
+            if zmin >= zmax: zlim = ((z >= zmin) & (z < zmax))
+            else: zlim = ((z >= zmin) | (z < zmax))
             in_subbox = (xlim & ylim & zlim)
-            #assert np.sum(in_subbox) == N_subbox
-            if np.sum(in_subbox) != N_subbox: 
-                print('%i particles in the box limits' % np.sum(in_subbox)) 
-                print('while there should be %i' % N_subbox)
-                raise ValueError
+            assert np.sum(in_subbox) == N_subbox
             
             ID_sub = fullbox['ID'][in_subbox]
             x_subbox = x[in_subbox]
