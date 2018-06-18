@@ -168,6 +168,7 @@ def mNuICs_subbox(nsubbox, nreal, sim='paco', nside=8, overwrite=False, verbose=
     if not os.path.isdir(_dir): raise ValueError("directory %s not found" % _dir)
     F = lambda isub: ''.join([_dir, 'ics.nside', str(nside), '.', str(isub), '.hdf5']) # snapshot 
     
+    iread = 0 
     subboxes = [] 
     for isubbox in nsubbox: 
         subbox = {} 
@@ -183,7 +184,7 @@ def mNuICs_subbox(nsubbox, nreal, sim='paco', nside=8, overwrite=False, verbose=
             fsub.close() 
         else: # write file 
             if verbose: print('Constructing %s ......' % F(isubbox)) 
-            if isubbox == nsubbox[0]: # read in full IC 
+            if iread == 0: # read in full IC 
                 fullbox = mNuICs(nreal, sim=sim, verbose=verbose)
                 # append extra metadata
                 fullbox['meta']['n_side'] = nside
@@ -197,6 +198,7 @@ def mNuICs_subbox(nsubbox, nreal, sim='paco', nside=8, overwrite=False, verbose=
                 L_halfres = 0.5 * L_res
                 N_partside = 512/nside
                 N_subbox = (N_partside)**3
+                iread += 1
 
             i_x = ((isubbox % nside**2) % nside) 
             i_y = ((isubbox % nside**2) // nside) 
@@ -209,11 +211,11 @@ def mNuICs_subbox(nsubbox, nreal, sim='paco', nside=8, overwrite=False, verbose=
             ymax = (L_subbox * float(i_y+1) + L_halfres) % 1000.
             zmin = L_subbox * float(i_z) + L_halfres
             zmax = (L_subbox * float(i_z+1) + L_halfres) % 1000.
-            if xmin >= xmax: xlim = ((x >= xmin) & (x < xmax))
+            if xmin <= xmax: xlim = ((x >= xmin) & (x < xmax))
             else: xlim = ((x >= xmin) | (x < xmax))
-            if ymin >= ymax: ylim = ((y >= ymin) & (y < ymax))
+            if ymin <= ymax: ylim = ((y >= ymin) & (y < ymax))
             else: ylim = ((y >= ymin) | (y < ymax))
-            if zmin >= zmax: zlim = ((z >= zmin) & (z < zmax))
+            if zmin <= zmax: zlim = ((z >= zmin) & (z < zmax))
             else: zlim = ((z >= zmin) | (z < zmax))
             in_subbox = (xlim & ylim & zlim)
             assert np.sum(in_subbox) == N_subbox
@@ -222,9 +224,9 @@ def mNuICs_subbox(nsubbox, nreal, sim='paco', nside=8, overwrite=False, verbose=
             x_subbox = x[in_subbox]
             y_subbox = y[in_subbox]
             z_subbox = z[in_subbox]
-            x_sub = x_subbox - i_x * L_subbox
-            y_sub = y_subbox - i_y * L_subbox
-            z_sub = z_subbox - i_z * L_subbox
+            x_sub = (x_subbox - i_x * L_subbox) % 1000.
+            y_sub = (y_subbox - i_y * L_subbox) % 1000.
+            z_sub = (z_subbox - i_z * L_subbox) % 1000.
 
             vx_subbox = vx[in_subbox]
             vy_subbox = vy[in_subbox]

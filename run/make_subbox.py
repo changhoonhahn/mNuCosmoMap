@@ -31,8 +31,7 @@ def mNuParticles_subbox(mneut, nreal, nzbin=2, sim='paco', nside=8):
 def mNuICs_subbox(nreal, sim='paco', nside=8): 
     ''' Generate subboxes of ICs 
     '''
-    #sb = mNuCat.mNuICs_subbox(range(nside**3), nreal, sim=sim, nside=nside, 
-    sb = mNuCat.mNuICs_subbox(7, nreal, sim=sim, nside=nside, 
+    sb = mNuCat.mNuICs_subbox(range(nside**3), nreal, sim=sim, nside=nside, 
             overwrite=True, verbose=True)
     return None
 
