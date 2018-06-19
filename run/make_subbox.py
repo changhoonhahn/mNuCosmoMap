@@ -28,11 +28,11 @@ def mNuParticles_subbox(mneut, nreal, nzbin=2, sim='paco', nside=8):
     return None 
 
 
-def mNuICs_subbox(nreal, sim='paco', nside=8): 
+def mNuICs_subbox(nsubbox, nreal, sim='paco', nside=8): 
     ''' Generate subboxes of ICs 
     '''
-    sb = mNuCat.mNuICs_subbox(range(nside**3), nreal, sim=sim, nside=nside, 
-            overwrite=True, verbose=True)
+    sb = mNuCat.mNuICs_subbox(nsubbox, nreal, sim=sim, nside=nside, 
+            overwrite=False, verbose=True)
     return None
 
 
@@ -83,7 +83,9 @@ if __name__=="__main__":
     if tt == 'ics': 
         nreal = int(sys.argv[2])
         nside = int(sys.argv[3]) 
-        mNuICs_subbox(nreal, sim='paco', nside=nside)
+        nsubbox0 = int(sys.argv[4])
+        nsubbox1 = int(sys.argv[5])
+        mNuICs_subbox(range(nsubbox0, nsubbox1+1), nreal, sim='paco', nside=nside)
     elif tt == 'particles': 
         mneut = float(sys.argv[1].strip('eV')) 
         nreal = int(sys.argv[2]) 
