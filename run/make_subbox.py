@@ -19,11 +19,11 @@ mpl.rcParams['ytick.major.width'] = 1.5
 mpl.rcParams['legend.frameon'] = False
 
 
-def mNuParticles_subbox(mneut, nreal, nzbin=2, sim='paco', nside=8): 
+def mNuParticles_subbox(nsubbox, mneut, nreal, nzbin=2, sim='paco', nside=8): 
     ''' Generate suboxes for given mneut, nreal, nzbin, sim, and nside using 
     mnucosmomap.catalogs.mNuParticles_subbox  
     '''
-    sb = mNuCat.mNuParticles_subbox(range(nside**3), mneut, nreal, nzbin, 
+    sb = mNuCat.mNuParticles_subbox(nsubbox, mneut, nreal, nzbin, 
             sim=sim, nside=nside, overwrite=True, verbose=False)
     return None 
 
@@ -87,11 +87,13 @@ if __name__=="__main__":
         nsubbox1 = int(sys.argv[5])
         mNuICs_subbox(range(nsubbox0, nsubbox1+1), nreal, sim='paco', nside=nside)
     elif tt == 'particles': 
-        mneut = float(sys.argv[1].strip('eV')) 
-        nreal = int(sys.argv[2]) 
-        nzbin = int(sys.argv[3]) 
-        nside = int(sys.argv[4]) 
-        mNuDispField_subbox(mneut, nreal, nzbin=nzbin, nside=nside)
+        mneut = float(sys.argv[2].strip('eV')) 
+        nreal = int(sys.argv[3]) 
+        nzbin = int(sys.argv[4]) 
+        nside = int(sys.argv[5]) 
+        nsubbox0 = int(sys.argv[6])
+        nsubbox1 = int(sys.argv[7])
+        mNuParticles_subbox(range(nsubbox0, nsubbox1+1), mneut, nreal, nzbin=nzbin, sim='paco', nside=nside)
     # randomly check a few subboxes to make sure. 
     #i_rand = np.random.choice(range(nsubbox), size=3, replace=False) 
     #for i in i_rand: 
