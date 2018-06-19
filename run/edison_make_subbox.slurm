@@ -13,6 +13,7 @@ module load python/2.7-anaconda
 source activate myenv0 
 
 nreal=1 
+nzbin=2 
 nside=8
     
 python /global/homes/c/chahah/projects/mNuCosmoMap/run/make_subbox.py "ics" $nreal $nside 400 511
