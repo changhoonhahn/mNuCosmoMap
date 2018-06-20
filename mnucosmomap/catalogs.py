@@ -113,7 +113,7 @@ def mNuParticles_subbox(nsubbox, mneut, nreal, nzbin, sim='paco', nside=8,
                 subbox[k] = fsub[k].value 
             fsub.close() 
         else: # write file 
-            print('Constructing %s ......' % f(isubbox)) 
+            print('Constructing %s ......' % F(isubbox)) 
             if isubbox == nsubbox[0]: 
                 # read in full box of Particles
                 fullbox = mNuParticles(mneut, nreal, nzbin, sim=sim, verbose=verbose)
