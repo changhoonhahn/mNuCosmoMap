@@ -6,8 +6,11 @@ neutrino simulations
 
 '''
 import os 
+import time 
 import h5py 
 import numpy as np 
+import ctypes
+import multiprocessing as MP
 # -- local -- 
 from mnucosmomap import util as UT 
 from mnucosmomap import readsnap as ReadSnap
@@ -171,10 +174,10 @@ def mNuICs_subbox(nsubbox, nreal, sim='paco', nside=8, overwrite=False, verbose=
     iread = 0 
     subboxes = [] 
     for isubbox in nsubbox: 
-        subbox = {} 
         if os.path.isfile(F(isubbox)) and not overwrite: # read in the file 
             if verbose: print('reading in %i of %i^3 subboxes' % (isubbox, nside)) 
             fsub = h5py.File(F(isubbox), 'r') # read in hdf5 file 
+            subbox = {} 
             subbox['meta'] = {} 
             for k in fsub.attrs.keys(): 
                 subbox['meta'][k] = fsub.attrs[k]
@@ -185,10 +188,12 @@ def mNuICs_subbox(nsubbox, nreal, sim='paco', nside=8, overwrite=False, verbose=
         else: # write file 
             if verbose: print('Constructing %s ......' % F(isubbox)) 
             if iread == 0: # read in full IC 
+                if verbose: print('Reading in full IC box...') 
+                if verbose: t_start = time.time() 
                 fullbox = mNuICs(nreal, sim=sim, verbose=verbose)
                 # append extra metadata
                 fullbox['meta']['n_side'] = nside
-                fullbox['meta']['n_subbox'] = nsubbox
+                fullbox['meta']['n_subbox'] = nside**3
 
                 x, y, z = fullbox['Position'].T
                 vx, vy, vz = fullbox['Velocity'].T
@@ -199,7 +204,9 @@ def mNuICs_subbox(nsubbox, nreal, sim='paco', nside=8, overwrite=False, verbose=
                 N_partside = 512/nside
                 N_subbox = (N_partside)**3
                 iread += 1
+                if verbose: print('full box read in takes: %f mins' % ((time.time() - t_start)/60.))
 
+            if verbose: t_start = time.time() 
             i_x = ((isubbox % nside**2) % nside) 
             i_y = ((isubbox % nside**2) // nside) 
             i_z = (isubbox // nside**2) 
@@ -246,16 +253,20 @@ def mNuICs_subbox(nsubbox, nreal, sim='paco', nside=8, overwrite=False, verbose=
                     #print('j_y = %i , %f < y < %f' % (j_y, L_res* float(j_y) + L_halfres, L_res * float(j_y + 1) + L_halfres))
                     ylim_sub = ((y_sub > L_res * float(j_y) + L_halfres) & 
                             (y_sub < L_res * float(j_y + 1) + L_halfres))
-                    for j_x in range(N_partside): 
-                        j_x_sorted = np.argsort(x_sub[ylim_sub & zlim_sub])
-                        subbox_ID[:,j_y,j_z] = ID_sub[ylim_sub & zlim_sub][j_x_sorted]
-                        subbox_pos[0,:,j_y,j_z] = x_subbox[ylim_sub & zlim_sub][j_x_sorted]
-                        subbox_pos[1,:,j_y,j_z] = y_subbox[ylim_sub & zlim_sub][j_x_sorted]
-                        subbox_pos[2,:,j_y,j_z] = z_subbox[ylim_sub & zlim_sub][j_x_sorted]
-                        subbox_vel[0,:,j_y,j_z] = vx_subbox[ylim_sub & zlim_sub][j_x_sorted]
-                        subbox_vel[1,:,j_y,j_z] = vy_subbox[ylim_sub & zlim_sub][j_x_sorted]
-                        subbox_vel[2,:,j_y,j_z] = vz_subbox[ylim_sub & zlim_sub][j_x_sorted]
+                    #for j_x in range(N_partside): 
+                    j_x_sorted = np.argsort(x_sub[ylim_sub & zlim_sub])
+                    subbox_ID[:,j_y,j_z] = ID_sub[ylim_sub & zlim_sub][j_x_sorted]
+                    subbox_pos[0,:,j_y,j_z] = x_subbox[ylim_sub & zlim_sub][j_x_sorted]
+                    subbox_pos[1,:,j_y,j_z] = y_subbox[ylim_sub & zlim_sub][j_x_sorted]
+                    subbox_pos[2,:,j_y,j_z] = z_subbox[ylim_sub & zlim_sub][j_x_sorted]
+                    subbox_vel[0,:,j_y,j_z] = vx_subbox[ylim_sub & zlim_sub][j_x_sorted]
+                    subbox_vel[1,:,j_y,j_z] = vy_subbox[ylim_sub & zlim_sub][j_x_sorted]
+                    subbox_vel[2,:,j_y,j_z] = vz_subbox[ylim_sub & zlim_sub][j_x_sorted]
+
+            if verbose: print('subbox construction takes: %f mins' % ((time.time() - t_start)/60.))
+            subbox = {} 
             subbox['meta'] = fullbox['meta'].copy() 
+            subbox['meta']['i_subbox'] = isubbox
             subbox['meta']['subbox_ijk'] = [i_x, i_y, i_z]
             subbox['ID'] = subbox_ID
             subbox['Position'] = subbox_pos
@@ -273,6 +284,312 @@ def mNuICs_subbox(nsubbox, nreal, sim='paco', nside=8, overwrite=False, verbose=
         return subboxes[0]
     else: 
         return subboxes
+
+
+def _mNuICs_subbox(nsubbox, nreal, sim='paco', nside=8, overwrite=False, verbose=False): 
+    ''' same as above but trying to make it faster...
+    '''
+    assert 512 % nside == 0 
+    try: 
+        Nsub = len(nsubbox) 
+    except TypeError: 
+        Nsub = 1 
+        nsubbox = [nsubbox]
+    for isubbox in nsubbox: 
+        if isubbox > nside**3: raise ValueError('%i exceeds number of subboxes specifed' % isubbox) 
+    if sim not in ['paco']: raise NotImplementedError('%s simulation not supported yet') 
+
+    _dir = ''.join([UT.mNuDir(0.0, sim=sim), str(nreal), '/ICs/'])
+    if not os.path.isdir(_dir): raise ValueError("directory %s not found" % _dir)
+    F = lambda isub: ''.join([_dir, '_ics.nside', str(nside), '.', str(isub), '.hdf5']) # snapshot 
+    
+    iread = 0 
+    subboxes = [] 
+    for isubbox in nsubbox: 
+        subbox = {} 
+        if os.path.isfile(F(isubbox)) and not overwrite: # read in the file 
+            if verbose: print('reading in %i of %i^3 subboxes' % (isubbox, nside)) 
+            fsub = h5py.File(F(isubbox), 'r') # read in hdf5 file 
+            subbox['meta'] = {} 
+            for k in fsub.attrs.keys(): 
+                subbox['meta'][k] = fsub.attrs[k]
+            # read in datasets
+            for k in fsub.keys(): 
+                subbox[k] = fsub[k].value 
+            fsub.close() 
+        else: # write file 
+            if verbose: print('Constructing %s ......' % F(isubbox)) 
+            if iread == 0: # read in full IC 
+                if verbose: print('Reading in full IC box...') 
+                if verbose: t_start = time.time() 
+                fullbox = mNuICs(nreal, sim=sim, verbose=verbose)
+                # append extra metadata
+                fullbox['meta']['n_side'] = nside
+                fullbox['meta']['n_subbox'] = nside**3
+
+                x, y, z = fullbox['Position'].T
+                vx, vy, vz = fullbox['Velocity'].T
+
+                L_subbox = 1000./float(nside) # L_subbox
+                L_res = 1000./512.
+                L_halfres = 0.5 * L_res
+                N_partside = 512/nside
+                N_subbox = (N_partside)**3
+                iread += 1
+                if verbose: print('full box read in takes: %f mins' % ((time.time() - t_start)/60.))
+
+            if verbose: t_start = time.time() 
+            i_x = ((isubbox % nside**2) % nside) 
+            i_y = ((isubbox % nside**2) // nside) 
+            i_z = (isubbox // nside**2) 
+            if verbose: print('%i, %i, %i' % (i_x, i_y, i_z))
+
+            xmin = L_subbox * float(i_x) + L_halfres
+            xmax = (L_subbox * float(i_x+1) + L_halfres) % 1000.
+            ymin = L_subbox * float(i_y) + L_halfres
+            ymax = (L_subbox * float(i_y+1) + L_halfres) % 1000.
+            zmin = L_subbox * float(i_z) + L_halfres
+            zmax = (L_subbox * float(i_z+1) + L_halfres) % 1000.
+            if xmin <= xmax: xlim = ((x >= xmin) & (x < xmax))
+            else: xlim = ((x >= xmin) | (x < xmax))
+            if ymin <= ymax: ylim = ((y >= ymin) & (y < ymax))
+            else: ylim = ((y >= ymin) | (y < ymax))
+            if zmin <= zmax: zlim = ((z >= zmin) & (z < zmax))
+            else: zlim = ((z >= zmin) | (z < zmax))
+            in_subbox = (xlim & ylim & zlim)
+            assert np.sum(in_subbox) == N_subbox
+            
+            ID_sub = fullbox['ID'][in_subbox]
+            x_subbox = x[in_subbox]
+            y_subbox = y[in_subbox]
+            z_subbox = z[in_subbox]
+            x_sub = (x_subbox - i_x * L_subbox) % 1000.
+            y_sub = (y_subbox - i_y * L_subbox) % 1000.
+            z_sub = (z_subbox - i_z * L_subbox) % 1000.
+
+            vx_subbox = vx[in_subbox]
+            vy_subbox = vy[in_subbox]
+            vz_subbox = vz[in_subbox]
+            if verbose: 
+                print('%f < x_sub < %f' % (x_sub.min(), x_sub.max()))
+                print('%f < y_sub < %f' % (y_sub.min(), y_sub.max()))
+                print('%f < z_sub < %f' % (z_sub.min(), z_sub.max()))
+            subbox_ID = np.zeros((N_partside, N_partside, N_partside))
+            subbox_pos = np.zeros((3, N_partside, N_partside, N_partside))
+            subbox_vel = np.zeros((3, N_partside, N_partside, N_partside))
+        
+            j_x = ((x_sub - L_halfres) // L_res).astype(int) 
+            j_y = ((y_sub - L_halfres) // L_res).astype(int) 
+            j_z = ((z_sub - L_halfres) // L_res).astype(int) 
+            subbox_ID[j_x,j_y,j_z] = ID_sub
+            subbox_pos[0,j_x,j_y,j_z] = x_subbox
+            subbox_pos[1,j_x,j_y,j_z] = y_subbox
+            subbox_pos[2,j_x,j_y,j_z] = z_subbox
+            subbox_vel[0,j_x,j_y,j_z] = vx_subbox
+            subbox_vel[1,j_x,j_y,j_z] = vy_subbox
+            subbox_vel[2,j_x,j_y,j_z] = vz_subbox
+            if verbose: print('subbox construction takes: %f mins' % ((time.time() - t_start)/60.))
+            
+            #for ii in range(N_subbox): 
+            #    j_x = int((x_sub[ii] - L_halfres) // L_res)
+            #    j_y = int((y_sub[ii] - L_halfres) // L_res)  
+            #    j_z = int((z_sub[ii] - L_halfres) // L_res)  
+            #    subbox_ID[j_x,j_y,j_z] = ID_sub[ii]
+            #    subbox_pos[0,j_x,j_y,j_z] = x_subbox[ii]
+            #    subbox_pos[1,j_x,j_y,j_z] = y_subbox[ii]
+            #    subbox_pos[2,j_x,j_y,j_z] = z_subbox[ii]
+            #    subbox_vel[0,j_x,j_y,j_z] = vx_subbox[ii]
+            #    subbox_vel[1,j_x,j_y,j_z] = vy_subbox[ii]
+            #    subbox_vel[2,j_x,j_y,j_z] = vz_subbox[ii]
+
+            subbox['meta'] = fullbox['meta'].copy() 
+            subbox['meta']['i_subbox'] = isubbox
+            subbox['meta']['subbox_ijk'] = [i_x, i_y, i_z]
+            subbox['ID'] = subbox_ID
+            subbox['Position'] = subbox_pos
+            subbox['Velocity'] = subbox_vel
+
+            fsub = h5py.File(F(isubbox), 'w') # save ID's to hdf5 file 
+            for k in subbox['meta'].keys(): # store meta data 
+                fsub.attrs.create(k, subbox['meta'][k]) 
+            fsub.create_dataset('ID', data=subbox['ID']) 
+            fsub.create_dataset('Position', data=subbox['Position']) 
+            fsub.create_dataset('Velocity', data=subbox['Velocity']) 
+            fsub.close() 
+        subboxes.append(subbox) 
+    if Nsub == 1: 
+        return subboxes[0]
+    else: 
+        return subboxes
+
+
+def _mNuICs_subbox_mp(nsubbox, nreal, sim='paco', nside=8, n_cpu=1, overwrite=False, verbose=False): 
+    ''' same as above but with multiprocessing to make it faster...
+    '''
+    assert 512 % nside == 0 
+    try: 
+        Nsub = len(nsubbox) 
+    except TypeError: 
+        Nsub = 1 
+        nsubbox = [nsubbox]
+    for isubbox in nsubbox: 
+        if isubbox > nside**3: raise ValueError('%i exceeds number of subboxes specifed' % isubbox) 
+    if sim not in ['paco']: raise NotImplementedError('%s simulation not supported yet') 
+
+    _dir = ''.join([UT.mNuDir(0.0, sim=sim), str(nreal), '/ICs/'])
+    if not os.path.isdir(_dir): raise ValueError("directory %s not found" % _dir)
+    F = lambda isub: ''.join([_dir, 'mp_ics.nside', str(nside), '.', str(isub), '.hdf5']) # snapshot 
+    
+    # which subboxes do we need to construct
+    construct = np.zeros(Nsub).astype(bool) 
+    for isub, isubbox in enumerate(nsubbox): 
+        if not os.path.isfile(F(isubbox)) or overwrite: 
+            construct[isub] = True 
+
+    if np.sum(construct) > 0: 
+        # if subbox needs to be constructed, read in 
+        # full IC box. 
+        if verbose: print('Reading in full IC box...') 
+        if verbose: t_start = time.time() 
+        fullbox = mNuICs(nreal, sim=sim, verbose=verbose)
+        # append extra metadata
+        fullbox['meta']['n_side'] = nside
+        fullbox['meta']['n_subbox'] = nside**3
+        x, y, z = fullbox['Position'].T
+        vx, vy, vz = fullbox['Position'].T
+        if verbose: print('full box read in takes: %f mins' % ((time.time() - t_start)/60.))
+    
+    if n_cpu > 1: 
+        if verbose: print('Constructing subboxes using %i processes...' % n_cpu)
+        if verbose: t_start = time.time()  
+        id_full_arr = MP.Array('i', fullbox['ID']) 
+        x_full = MP.Array('i', x) 
+        y_full = MP.Array('i', y) 
+        z_full = MP.Array('i', z) 
+        vx_full = MP.Array('i', vx) 
+        vy_full = MP.Array('i', vy) 
+        vz_full = MP.Array('i', vz) 
+        if verbose: print('allocating shared arrays takes: %f mins' % ((time.time() - t_start)/60.))
+
+        pewl = MP.Pool(processes=n_cpu)
+        mapfn = pewl.map
+    
+        kwargs = {'nside': nside, 'meta': fullbox['meta'], 'verbose': verbose}
+        arglist = [[isubbox, id_full_arr, x_full, y_full, z_full, vx_full, vy_full, vz_full, kwargs, {'f_subbox': F(isubbox)}] 
+                for isubbox in np.array(nsubbox)[construct]] 
+
+        const_subboxes = mapfn(_makesubbox_mNuICs, [arg for arg in arglist])
+
+        pewl.close()
+        pewl.terminate()
+        pewl.join() 
+    else: 
+        const_subboxes = [] 
+        for isubbox in np.array(nsubbox)[construct]:
+            subbox = _makesubbox_mNuICs(isubbox, fullbox['ID'], x, y, z, vx, vy, vz, 
+                    nside=nside, f_subbox=F(isubbox), meta=fullbox['meta'], verbose=verbose)
+            const_subboxes.append(subbox) 
+
+    iread = 0 
+    subboxes = [] 
+    for isub, isubbox in enumerate(nsubbox): 
+        if not construct[isub]: # read in the file 
+            subbox = {} 
+            if verbose: print('reading in %i of %i^3 subboxes' % (isubbox, nside)) 
+            fsub = h5py.File(F(isubbox), 'r') # read in hdf5 file 
+            subbox['meta'] = {} 
+            for k in fsub.attrs.keys(): 
+                subbox['meta'][k] = fsub.attrs[k]
+            # read in datasets
+            for k in fsub.keys(): 
+                subbox[k] = fsub[k].value 
+            fsub.close() 
+        else: 
+            subbox = const_subboxes[iread]
+            iread += 1
+        subboxes.append(subbox) 
+
+    if Nsub == 1: 
+        return subboxes[0]
+    else: 
+        return subboxes
+
+
+def _makesubbox_mNuICs(isubbox, id_full, x, y, z, vx, vy, vz, nside=None, meta=None, f_subbox=None, verbose=False): 
+    if verbose: print('Constructing %s ......' % f_subbox) 
+
+    L_subbox = 1000./float(nside) # L_subbox
+    L_res = 1000./512.
+    L_halfres = 0.5 * L_res
+    N_partside = 512/nside
+    N_subbox = (N_partside)**3
+
+    i_x = ((isubbox % nside**2) % nside) 
+    i_y = ((isubbox % nside**2) // nside) 
+    i_z = (isubbox // nside**2) 
+    if verbose: print('%i, %i, %i' % (i_x, i_y, i_z))
+
+    xmin = L_subbox * float(i_x) + L_halfres
+    xmax = (L_subbox * float(i_x+1) + L_halfres) % 1000.
+    ymin = L_subbox * float(i_y) + L_halfres
+    ymax = (L_subbox * float(i_y+1) + L_halfres) % 1000.
+    zmin = L_subbox * float(i_z) + L_halfres
+    zmax = (L_subbox * float(i_z+1) + L_halfres) % 1000.
+    if xmin <= xmax: xlim = ((x >= xmin) & (x < xmax))
+    else: xlim = ((x >= xmin) | (x < xmax))
+    if ymin <= ymax: ylim = ((y >= ymin) & (y < ymax))
+    else: ylim = ((y >= ymin) | (y < ymax))
+    if zmin <= zmax: zlim = ((z >= zmin) & (z < zmax))
+    else: zlim = ((z >= zmin) | (z < zmax))
+    in_subbox = (xlim & ylim & zlim)
+    assert np.sum(in_subbox) == N_subbox
+    
+    ID_sub = id_full[in_subbox] #fullbox['ID'][in_subbox]
+    x_subbox = x[in_subbox]
+    y_subbox = y[in_subbox]
+    z_subbox = z[in_subbox]
+    x_sub = (x_subbox - i_x * L_subbox) % 1000.
+    y_sub = (y_subbox - i_y * L_subbox) % 1000.
+    z_sub = (z_subbox - i_z * L_subbox) % 1000.
+
+    vx_subbox = vx[in_subbox]
+    vy_subbox = vy[in_subbox]
+    vz_subbox = vz[in_subbox]
+    if verbose: 
+        print('%f < x_sub < %f' % (x_sub.min(), x_sub.max()))
+        print('%f < y_sub < %f' % (y_sub.min(), y_sub.max()))
+        print('%f < z_sub < %f' % (z_sub.min(), z_sub.max()))
+    subbox_ID = np.zeros((N_partside, N_partside, N_partside))
+    subbox_pos = np.zeros((3, N_partside, N_partside, N_partside))
+    subbox_vel = np.zeros((3, N_partside, N_partside, N_partside))
+
+    j_x = ((x_sub - L_halfres) // L_res).astype(int) 
+    j_y = ((y_sub - L_halfres) // L_res).astype(int) 
+    j_z = ((z_sub - L_halfres) // L_res).astype(int) 
+    subbox_ID[j_x,j_y,j_z] = ID_sub
+    subbox_pos[0,j_x,j_y,j_z] = x_subbox
+    subbox_pos[1,j_x,j_y,j_z] = y_subbox
+    subbox_pos[2,j_x,j_y,j_z] = z_subbox
+    subbox_vel[0,j_x,j_y,j_z] = vx_subbox
+    subbox_vel[1,j_x,j_y,j_z] = vy_subbox
+    subbox_vel[2,j_x,j_y,j_z] = vz_subbox
+    
+    subbox = {} 
+    subbox['meta'] = meta.copy()  #fullbox['meta'].copy() 
+    subbox['meta']['i_subbox'] = isubbox
+    subbox['meta']['subbox_ijk'] = [i_x, i_y, i_z]
+    subbox['ID'] = subbox_ID
+    subbox['Position'] = subbox_pos
+    subbox['Velocity'] = subbox_vel
+
+    fsub = h5py.File(f_subbox, 'w') # save ID's to hdf5 file 
+    for k in subbox['meta'].keys(): # store meta data 
+        fsub.attrs.create(k, subbox['meta'][k]) 
+    fsub.create_dataset('ID', data=subbox['ID']) 
+    fsub.create_dataset('Position', data=subbox['Position']) 
+    fsub.create_dataset('Velocity', data=subbox['Velocity']) 
+    fsub.close() 
+    return subbox
 
 
 def mNuParticles(mneut, nreal, nzbin, sim='paco', overwrite=False, verbose=False): 
@@ -393,88 +710,3 @@ def mNuICs(nreal, sim='paco', overwrite=False, verbose=False):
             f_ics.attrs.create(k, particle_data['meta'][k]) 
         f_ics.close() 
     return particle_data 
-
-
-"""
-    def mNuDispField(mneut, nreal, nzbin, boundary_correct=True, sim='paco', overwrite=False, verbose=False): 
-        ''' Read in displacement field of the snapshot generated from Paco's code 
-
-        parameters
-        ----------
-        mneut : float, 
-            total neutrino mass 
-
-        nreal : int,
-            realization number 
-
-        nzbin : int, 
-            integer specifying the redshift of the snapshot. 
-            nzbin = 0 --> z=3
-            nzbin = 1 --> z=2
-            nzbin = 2 --> z=1
-            nzbin = 3 --> z=0.5
-            nzbin = 4 --> z=0
-
-        sim : str
-            option kwarg to specify which simulation. At this moment
-            this doesn't really do much since we only have paco's 
-            simulatin 
-        '''
-        if sim not in ['paco']: raise NotImplementedError('%s simulation not supported yet') 
-        if mneut == 0.1: str_mneut = '0.10'
-        else: str_mneut = str(mneut) 
-        _dir = ''.join([UT.dat_dir(), 'sims/paco/', # directory 
-            str_mneut, 'eV/', str(nreal), '/snapdir_', str(nzbin).zfill(3), '/'])
-        if not os.path.isdir(_dir): raise ValueError("directory %s not found" % _dir)
-        f = ''.join([_dir, 'snap_', str(nzbin).zfill(3), '.dispfield.hdf5']) # snapshot 
-        
-        if os.path.isfile(f) and not overwrite: # read in the file 
-            dispfield = {} 
-            
-            fdisp = h5py.File(f, 'r') # read in hdf5 file 
-            dispfield['meta'] = {} 
-            for k in fdisp.attrs.keys(): 
-                dispfield['meta'][k] = fdisp.attrs[k]
-            # read in datasets
-            for k in fdisp.keys(): 
-                dispfield[k] = fdisp[k].value 
-            fdisp.close() 
-
-        else: # write file 
-            print('Constructing %s ......' % f) 
-            # read in particles of snapshot 
-            par = mNuParticles(mneut, nreal, nzbin, sim=sim, verbose=verbose)
-            # read in initial conditions 
-            ics = mNuICs(nreal, sim=sim, verbose=verbose) 
-            assert len(ics['ID']) == len(par['ID']) 
-
-            isort_ics = np.argsort(ics['ID']) 
-            isort_par = np.argsort(par['ID']) 
-            #assert np.array_equal(ics['ID'][isort_ics], par['ID'][isort_par])
-
-            dispfield = {} 
-            dispfield['meta'] = par['meta'].copy() 
-            dispfield['ID'] = ics['ID'][isort_ics]
-            # position @ snapshot - position @ initial condition
-            dispfield['dispfield'] = par['Position'][isort_par] - ics['Position'][isort_ics]
-            
-            fdisp = h5py.File(f, 'w') # save ID's to hdf5 file 
-            for k in dispfield.keys(): 
-                if k == 'meta': continue 
-                fdisp.create_dataset(k, data=dispfield[k]) 
-
-            for k in par['meta'].keys(): # store meta data 
-                fdisp.attrs.create(k, dispfield['meta'][k]) 
-            fdisp.close() 
-
-        if boundary_correct: 
-            # correct for the cases where particles cross the periodic boundaries 
-            # the correction at the moment is brute forced. 
-            for i in range(3): 
-                cross_neg = (dispfield['dispfield'][:,i] < -900.) 
-                dispfield['dispfield'][cross_neg,i] += 1000.
-                
-                cross_pos = (dispfield['dispfield'][:,i] > 900.) 
-                dispfield['dispfield'][cross_pos,i] = 1000. - dispfield['dispfield'][cross_pos,i]
-        return dispfield 
-"""
