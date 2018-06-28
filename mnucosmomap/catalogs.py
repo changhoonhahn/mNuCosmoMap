@@ -127,7 +127,8 @@ def mNuParticles_subbox(nsubbox, mneut, nreal, nzbin, sim='paco', nside=8,
 
             subbox['meta'] = fullbox['meta'].copy() 
             subbox['meta']['n_side'] = nside # append extra metadata
-            subbox['meta']['n_subbox'] = nsubbox
+            subbox['meta']['n_subbox'] = nside**3
+            subbox['meta']['i_subbox'] = isubbox 
             subbox['meta']['subbox_ijk'] = subb['meta']['subbox_ijk']
             subbox['ID'] = subb['ID'].copy()  
             for k in ['Position', 'Velocity']: 
