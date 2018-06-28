@@ -3,6 +3,7 @@
 Deal with the different catalogs associated with Paco's massive
 neutrino simulations 
 
+author(s) : ChangHoon Hahn 
 
 '''
 import os 
@@ -101,7 +102,8 @@ def mNuParticles_subbox(nsubbox, mneut, nreal, nzbin, sim='paco', nside=8,
     if not os.path.isdir(_dir): raise ValueError("directory %s not found" % _dir)
     # snapshot subbox file 
     F = lambda isub: ''.join([_dir, 'snap_', str(nzbin).zfill(3), '.nside', str(nside), '.', str(isub), '.hdf5']) 
-
+    
+    iread = 0 
     subboxes = [] 
     for isubbox in nsubbox: 
         subbox = {} 
@@ -115,10 +117,11 @@ def mNuParticles_subbox(nsubbox, mneut, nreal, nzbin, sim='paco', nside=8,
             fsub.close() 
         else: # write file 
             print('Constructing %s ......' % F(isubbox)) 
-            if isubbox == nsubbox[0]: 
+            if iread == 0: 
                 # read in full box of Particles
                 fullbox = mNuParticles(mneut, nreal, nzbin, sim=sim, verbose=verbose)
                 isort_box = np.argsort(fullbox['ID'])
+                iread += 0 
 
             # read in subbox indicies
             subb = mNuICs_subbox(isubbox, nreal, sim=sim, nside=nside, verbose=verbose)
@@ -153,7 +156,8 @@ def mNuParticles_subbox(nsubbox, mneut, nreal, nzbin, sim='paco', nside=8,
 
 
 def mNuICs_subbox(nsubbox, nreal, sim='paco', nside=8, overwrite=False, verbose=False): 
-    ''' same as above but trying to make it faster...
+    ''' Read in (and write out if it doesn't exist) particle ID, Positions and Velocities 
+    of initial condition particles within subbox.
     '''
     assert 512 % nside == 0 
     try: 
@@ -290,8 +294,8 @@ def mNuICs_subbox(nsubbox, nreal, sim='paco', nside=8, overwrite=False, verbose=
 
 
 def _mNuICs_subbox(nsubbox, nreal, sim='paco', nside=8, overwrite=False, verbose=False): 
-    ''' Read in (and write out if it doesn't exist) particle ID of initial condition
-    particles within subbox  
+    ''' same as above but with an older version of indexing that was slower, but had 
+    multiple tests conducted on it. 
     '''
     assert 512 % nside == 0 
     try: 
