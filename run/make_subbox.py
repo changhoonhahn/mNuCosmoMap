@@ -36,6 +36,13 @@ def mNuICs_subbox(nsubbox, nreal, sim='paco', nside=8):
     return None
 
 
+def _mNuICs_subbox_mp(nsubbox, nreal, sim='paco', nside=8, n_cpu=1): 
+    ''' Generate subboxes of ICs 
+    '''
+    sb = mNuCat._mNuICs_subbox_mp(nsubbox, nreal, sim=sim, nside=nside, n_cpu=n_cpu, 
+            overwrite=True, verbose=True)
+    return None
+
 """
     def mNuDispField_subbox(mneut, nreal, nzbin, sim='paco', nside=8, nsubbox=None): 
         '''
@@ -86,6 +93,13 @@ if __name__=="__main__":
         nsubbox0 = int(sys.argv[4])
         nsubbox1 = int(sys.argv[5])
         mNuICs_subbox(range(nsubbox0, nsubbox1+1), nreal, sim='paco', nside=nside)
+    elif tt == 'ics_mp': 
+        nreal = int(sys.argv[2])
+        nside = int(sys.argv[3]) 
+        nsubbox0 = int(sys.argv[4])
+        nsubbox1 = int(sys.argv[5])
+        n_cpu = int(sys.argv[6]) 
+        _mNuICs_subbox_mp(range(nsubbox0, nsubbox1+1), nreal, sim='paco', nside=nside, n_cpu=n_cpu)
     elif tt == 'particles': 
         mneut = float(sys.argv[2].strip('eV')) 
         nreal = int(sys.argv[3]) 

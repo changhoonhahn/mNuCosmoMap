@@ -1,10 +1,12 @@
 #!/bin/bash -l 
 #SBATCH -q debug 
 #SBATCH -N 1 
-#SBATCH -t 00:10:00 
+#SBATCH -t 00:05:00 
+#SBATCH -C haswell
 #SBATCH -J _make_subbox_mptest
 #SBATCH -o _make_subbox_mptest.o 
 #SBATCH -L SCRATCH,project 
+
 
 now=$(date +"%T") 
 echo "start time ... $now"
@@ -18,15 +20,6 @@ nside=8
 
 n_cpu=2
 srun -n 1 -c $n_cpu python /global/homes/c/chahah/projects/mNuCosmoMap/run/make_subbox.py "ics_mp" $nreal $nside 0 1 $n_cpu
-
-# ICs
-#python /global/homes/c/chahah/projects/mNuCosmoMap/run/make_subbox.py "ics" $nreal $nside 500 511 
-
-# particles 
-#mneut=0.6eV
-#echo "neutrino mass = "$mneut
-#python /global/homes/c/chahah/projects/mNuCosmoMap/run/make_subbox.py "particles" $mneut $nreal $nzbin $nside  0 511 
-
 
 now=$(date +"%T") 
 echo "end time ... $now"

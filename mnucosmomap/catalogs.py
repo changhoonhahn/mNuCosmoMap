@@ -15,6 +15,7 @@ import multiprocessing as MP
 from mnucosmomap import util as UT 
 from mnucosmomap import readsnap as ReadSnap
 
+var_dict = {}
 
 def mNuDispField_subbox(nsubbox, mneut, nreal, nzbin, sim='paco', nside=8, boundary_correct=True, 
         overwrite=False, verbose=False): 
@@ -462,24 +463,28 @@ def _mNuICs_subbox_mp(nsubbox, nreal, sim='paco', nside=8, n_cpu=1, overwrite=Fa
     if n_cpu > 1: 
         if verbose: print('Constructing subboxes using %i processes...' % n_cpu)
         if verbose: t_start = time.time()  
-        id_full_arr = MP.Array('i', fullbox['ID']) 
-        x_full = MP.Array('i', x) 
-        y_full = MP.Array('i', y) 
-        z_full = MP.Array('i', z) 
-        vx_full = MP.Array('i', vx) 
-        vy_full = MP.Array('i', vy) 
-        vz_full = MP.Array('i', vz) 
+
+        N_part = len(fullbox['ID']) 
+        id_full = MP.RawArray('i', N_part) 
+        id_full_np = np.frombuffer(id_full, dtype=np.int32)
+        np.copyto(id_full_np, fullbox['ID']) 
+
+        xyz_full = MP.RawArray('d', 3*N_part) 
+        xyz_full_np = np.frombuffer(xyz_full, dtype=np.float64).reshape((3,N_part)) 
+        np.copyto(xyz_full_np, fullbox['Position'].T) 
+
+        vxyz_full = MP.RawArray('d', 3*N_part) 
+        vxyz_full_np = np.frombuffer(vxyz_full, dtype=np.float64).reshape((3,N_part)) 
+        np.copyto(vxyz_full_np, fullbox['Velocity'].T) 
+
         if verbose: print('allocating shared arrays takes: %f mins' % ((time.time() - t_start)/60.))
 
-        pewl = MP.Pool(processes=n_cpu)
-        mapfn = pewl.map
-    
         kwargs = {'nside': nside, 'meta': fullbox['meta'], 'verbose': verbose}
-        arglist = [[isubbox, id_full_arr, x_full, y_full, z_full, vx_full, vy_full, vz_full, kwargs, {'f_subbox': F(isubbox)}] 
-                for isubbox in np.array(nsubbox)[construct]] 
+        argslist = [(isubbox, kwargs, {'f_subbox': F(isubbox)}) for isubbox in np.array(nsubbox)[construct]] 
 
-        const_subboxes = mapfn(_makesubbox_mNuICs, [arg for arg in arglist])
-
+        pewl = MP.Pool(processes=n_cpu, initializer=init_pool, initargs=(id_full, xyz_full, vxyz_full, N_part))
+        mapfn = pewl.map
+        const_subboxes = mapfn(_makesubbox_mNuICs, [arg for arg in argslist])
         pewl.close()
         pewl.terminate()
         pewl.join() 
@@ -515,8 +520,22 @@ def _mNuICs_subbox_mp(nsubbox, nreal, sim='paco', nside=8, n_cpu=1, overwrite=Fa
         return subboxes
 
 
-def _makesubbox_mNuICs(isubbox, id_full, x, y, z, vx, vy, vz, nside=None, meta=None, f_subbox=None, verbose=False): 
+def init_pool(id_full, xyz_full, vxyz_full, N_part): 
+    var_dict['id'] = id_full
+    var_dict['xyz'] = xyz_full
+    var_dict['vxyz'] = vxyz_full
+    var_dict['N_part'] = N_part
+
+
+def _makesubbox_mNuICs(isubbox, nside=None, meta=None, f_subbox=None, verbose=False): 
     if verbose: print('Constructing %s ......' % f_subbox) 
+    id_full = np.frombuffer(var_dict['id'])
+
+    xyz_full = np.frombuffer(var_dict['xyz']).reshape((3, var_dict['N_part']))
+    x, y, z = xyz_full
+
+    vxyz_full = np.frombuffer(var_dict['vxyz']).reshape((3, var_dict['N_part']))
+    vx, vy, vz = vxyz_full
 
     L_subbox = 1000./float(nside) # L_subbox
     L_res = 1000./512.
