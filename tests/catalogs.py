@@ -5,6 +5,7 @@ Tests for mnucosmomap.catalogs
 
 '''
 import time
+import h5py
 import numpy as np 
 from mnucosmomap import util as UT 
 from mnucosmomap import catalogs as mNuCat 
@@ -155,35 +156,6 @@ def mNuParticles_subbox(mneut=0.0, nreal=1, nzbin=2, sim='paco', nside=8):
     return None 
 
 
-def _mNuICs_subbox_mp(nsubbox=1, nreal=1, sim='paco', n_cpu=1): 
-    ''' examine particles from catalog.mNuICs within
-    a 10^3 Mpc subbox.
-    '''
-    t_start = time.time() 
-    _subboxes = mNuCat._mNuICs_subbox_mp(nsubbox, nreal, sim=sim, nside=8, n_cpu=n_cpu, overwrite=True, verbose=True)
-    if isinstance(nsubbox, int): _subboxes = [_subboxes]
-    print('_mNuICs_subbox: %f mins' % ((time.time() - t_start)/60.))
-
-    t_start = time.time() 
-    # read in initial condition particles within subbox
-    subboxes = mNuCat.mNuICs_subbox(nsubbox, nreal, sim=sim, nside=8, overwrite=False, verbose=True)
-    if isinstance(nsubbox, int): subboxes = [subboxes]
-    print('mNuICs_subbox: %f mins' % ((time.time() - t_start)/60.))
-    
-    for _subbox, subbox in zip(_subboxes, subboxes): 
-        _x_sub = _subbox['Position'][0,:,:,:].flatten()
-        _y_sub = _subbox['Position'][1,:,:,:].flatten()
-        _z_sub = _subbox['Position'][2,:,:,:].flatten()
-
-        x_sub = subbox['Position'][0,:,:,:].flatten()
-        y_sub = subbox['Position'][1,:,:,:].flatten()
-        z_sub = subbox['Position'][2,:,:,:].flatten()
-        print('delta x range: %f - %f' % (np.abs(_x_sub - x_sub).min(), np.abs(_x_sub - x_sub).max()))
-        print('delta y range: %f - %f' % (np.abs(_y_sub - y_sub).min(), np.abs(_y_sub - y_sub).max()))
-        print('delta z range: %f - %f' % (np.abs(_z_sub - z_sub).min(), np.abs(_z_sub - z_sub).max()))
-    return None 
-
-
 def _mNuICs_subbox(nsubbox=1, nreal=1, sim='paco'): 
     ''' examine particles from catalog.mNuICs within
     a 10^3 Mpc subbox.
@@ -293,12 +265,57 @@ def mNuICs(nreal=1, sim='paco'):
     return None 
 
 
+"""
+    def _mNuICs_subbox_mp(nsubbox=1, nreal=1, sim='paco'): 
+        ''' examine particles from catalog.mNuICs within
+        a 10^3 Mpc subbox.
+        '''
+        t_start = time.time() 
+        nside = 8 
+        _dir = ''.join([UT.mNuDir(0.0, sim=sim), str(nreal), '/ICs/'])
+        F = lambda isub: ''.join([_dir, 'ics.nside', str(nside), '.', str(isub), '.hdf5']) 
+
+        _subboxes = [] 
+        for isubbox in nsubbox: 
+            fsub = h5py.File(F(isubbox), 'r') # read in hdf5 file 
+            subbox = {} 
+            subbox['meta'] = {} 
+            for k in fsub.attrs.keys(): 
+                subbox['meta'][k] = fsub.attrs[k]
+            # read in datasets
+            for k in fsub.keys(): 
+                subbox[k] = fsub[k].value 
+            fsub.close() 
+            _subboxes.append(subbox) 
+        if isinstance(nsubbox, int): _subboxes = [_subboxes]
+        print('_mNuICs_subbox: %f mins' % ((time.time() - t_start)/60.))
+
+        t_start = time.time() 
+        # read in initial condition particles within subbox
+        subboxes = mNuCat.mNuICs_subbox(nsubbox, nreal, sim=sim, nside=8, overwrite=False, verbose=True)
+        if isinstance(nsubbox, int): subboxes = [subboxes]
+        print('mNuICs_subbox: %f mins' % ((time.time() - t_start)/60.))
+        
+        for _subbox, subbox in zip(_subboxes, subboxes): 
+            _x_sub = _subbox['Position'][0,:,:,:].flatten()
+            _y_sub = _subbox['Position'][1,:,:,:].flatten()
+            _z_sub = _subbox['Position'][2,:,:,:].flatten()
+
+            x_sub = subbox['Position'][0,:,:,:].flatten()
+            y_sub = subbox['Position'][1,:,:,:].flatten()
+            z_sub = subbox['Position'][2,:,:,:].flatten()
+            print('delta x range: %f - %f' % (np.abs(_x_sub - x_sub).min(), np.abs(_x_sub - x_sub).max()))
+            print('delta y range: %f - %f' % (np.abs(_y_sub - y_sub).min(), np.abs(_y_sub - y_sub).max()))
+            print('delta z range: %f - %f' % (np.abs(_z_sub - z_sub).min(), np.abs(_z_sub - z_sub).max()))
+        return None 
+"""
+
+
 if __name__=="__main__": 
     #mNuICs()
     #mNuParticles()
-    #mp_mNuICs_subbox(nsubbox=1, nreal=1, sim='paco', n_cpu=1)
-    _mNuICs_subbox_mp(nsubbox=[0,1], nreal=1, sim='paco', n_cpu=2)
-    #_mNuICs_subbox(nsubbox=[0,1,2])
+    #_mNuICs_subbox_mp(nsubbox=[0,1,2,3], nreal=1, sim='paco')
+    _mNuICs_subbox(nsubbox=[0,1,2])
     #mNuParticles_subbox()
     #_mNuParticles_subbox_mneut() 
     #_mNuDispField_subbox_mneut()
