@@ -122,10 +122,17 @@ if __name__=="__main__":
         print('Everything took %f mins' % ((time.time() - t00)/60.))
     elif tt == 'particles': 
         mneut = float(sys.argv[2].strip('eV')) 
+        print('m_nu = %f eV' % mneut) 
         nreal = int(sys.argv[3]) 
+        print('nreal = %i' % nreal) 
         nzbin = int(sys.argv[4]) 
+        print('nzbin = %i' % nzbin) 
         nside = int(sys.argv[5]) 
+        print('nside = %i' % nside) 
         nsubbox = range(int(sys.argv[6]), int(sys.argv[7])+1)
+        print('nsubbox = %i-%i' % (nsubbox[0], nsubbox[1])) 
+        n_cpu = int(sys.argv[8]) 
+        print('with %i cpus' % n_cpu)
         sim = 'paco'
         t00 = time.time() 
     
@@ -146,7 +153,8 @@ if __name__=="__main__":
             subb = mNuCat.mNuICs_subbox(isubbox, nreal, nside=nside, sim=sim, verbose=True)
             N_partside, N_partside, N_partside = subb['ID'].shape
             sub_id = subb['ID'].flatten()
-
+        
+            subbox = {} 
             subbox['meta'] = fullbox['meta'].copy() 
             subbox['meta']['n_side'] = nside # append extra metadata
             subbox['meta']['n_subbox'] = nside**3 
