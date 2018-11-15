@@ -98,10 +98,11 @@ def mNuParticles_subbox(nsubbox, mneut, nreal, nzbin, sim='paco', nside=8,
         if isubbox > nside**3: raise ValueError('%i exceeds number of subboxes specifed' % isubbox) 
     if sim not in ['paco']: raise NotImplementedError('%s simulation not supported yet') 
     
-    _dir = ''.join([UT.mNuDir(mneut, sim=sim), str(nreal), '/snapdir_', str(nzbin).zfill(3), '/'])
+    _dir = ''.join([UT.hades_dir(), 'subbox/zbin', str(nzbin), '/']) 
     if not os.path.isdir(_dir): raise ValueError("directory %s not found" % _dir)
     # snapshot subbox file 
-    F = lambda isub: ''.join([_dir, 'snap_', str(nzbin).zfill(3), '.nside', str(nside), '.', str(isub), '.hdf5']) 
+    F = lambda isub: ''.join([_dir, 
+        'part.', str(mneut), 'eV.', str(nreal), '.z', str(nzbin), '.nside', str(nside), '.', str(isub), '.hdf5']) 
     
     iread = 0 
     subboxes = [] 
@@ -169,9 +170,9 @@ def mNuICs_subbox(nsubbox, nreal, sim='paco', nside=8, overwrite=False, verbose=
         if isubbox > nside**3: raise ValueError('%i exceeds number of subboxes specifed' % isubbox) 
     if sim not in ['paco']: raise NotImplementedError('%s simulation not supported yet') 
 
-    _dir = ''.join([UT.mNuDir(0.0, sim=sim), str(nreal), '/ICs/'])
+    _dir = ''.join([UT.hades_dir(), 'subbox/ics/']) 
     if not os.path.isdir(_dir): raise ValueError("directory %s not found" % _dir)
-    F = lambda isub: ''.join([_dir, 'ics.nside', str(nside), '.', str(isub), '.hdf5']) 
+    F = lambda isub: ''.join([_dir, 'ics.', str(nreal), '.nside', str(nside), '.', str(isub), '.hdf5'])
     
     iread = 0 
     subboxes = [] 
@@ -179,7 +180,11 @@ def mNuICs_subbox(nsubbox, nreal, sim='paco', nside=8, overwrite=False, verbose=
         subbox = {} 
         if os.path.isfile(F(isubbox)) and not overwrite: # read in the file 
             if verbose: print('reading in %i of %i^3 subboxes' % (isubbox, nside)) 
-            fsub = h5py.File(F(isubbox), 'r') # read in hdf5 file 
+            try: 
+                fsub = h5py.File(F(isubbox), 'r') # read in hdf5 file 
+            except IOError: 
+                print("IOError while reading %s" % F(isubbox))
+                raise ValueError
             subbox['meta'] = {} 
             for k in fsub.attrs.keys(): 
                 subbox['meta'][k] = fsub.attrs[k]
@@ -451,9 +456,8 @@ def mNuParticles(mneut, nreal, nzbin, sim='paco', overwrite=False, verbose=False
         simulatin 
     '''
     if sim not in ['paco']: raise NotImplementedError('%s simulation not supported yet') 
-    _dir = ''.join([UT.mNuDir(mneut, sim=sim), str(nreal), '/snapdir_', str(nzbin).zfill(3), '/'])
-    if not os.path.isdir(_dir): raise ValueError("directory %s not found" % _dir)
-    f = ''.join([_dir, 'snap_', str(nzbin).zfill(3), '.hdf5']) # snapshot 
+    part_dir = ''.join([UT.hades_dir(), 'particles/zbin', str(nzbin), '/'])
+    f = ''.join([part_dir, 'part.', str(mneut), 'eV.', str(nreal), '.z', str(nzbin), '.hdf5']) # snapshot 
 
     particle_data = {} 
     if os.path.isfile(f) and not overwrite: # read in the file 
@@ -466,6 +470,8 @@ def mNuParticles(mneut, nreal, nzbin, sim='paco', overwrite=False, verbose=False
             particle_data[k] = f_par[k].value 
         f_par.close() 
     else: # write file 
+        _dir = ''.join([UT.mNuDir(mneut, sim=sim), str(nreal), '/snapdir_', str(nzbin).zfill(3), '/'])
+        if not os.path.isdir(_dir): raise ValueError("directory %s not found" % _dir)
         f_gadget = ''.join([_dir, 'snap_', str(nzbin).zfill(3)]) # snapshot 
         # read in Gadget header
         header = ReadSnap.read_gadget_header(f_gadget)
@@ -507,9 +513,8 @@ def mNuICs(nreal, sim='paco', overwrite=False, verbose=False):
         simulatin 
     '''
     if sim not in ['paco']: raise NotImplementedError('%s simulation not supported yet') 
-    _dir = ''.join([UT.mNuDir(0.0, sim=sim), str(nreal), '/ICs/'])
-    if not os.path.isdir(_dir): raise ValueError("directory %s not found" % _dir)
-    f = ''.join([_dir, 'ics.hdf5']) # snapshot 
+    ics_dir = ''.join([UT.hades_dir(), 'ics/']) 
+    f = ''.join([ics_dir, 'ics.', str(nreal), '.hdf5']) # snapshot 
     
     particle_data = {} 
     if os.path.isfile(f) and not overwrite: # read in the file 
@@ -522,7 +527,9 @@ def mNuICs(nreal, sim='paco', overwrite=False, verbose=False):
             particle_data[k] = f_ics[k].value 
         f_ics.close() 
     else: # write file 
-        f_gadget = ''.join([_dir, 'ics']) # read in Gadget header
+        hades_dir = ''.join([UT.mNuDir(0.0, sim=sim), str(nreal), '/ICs/'])
+        if not os.path.isdir(hades_dir): raise ValueError("directory %s not found" % hades_dir)
+        f_gadget = ''.join([hades_dir, 'ics']) # read in Gadget header
         header = ReadSnap.read_gadget_header(f_gadget)
 
         # read in CDM particles (parttype = 1) and create catalogue

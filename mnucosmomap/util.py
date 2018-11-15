@@ -25,6 +25,10 @@ def mNuDir(mneut, sim='paco'):
     return ''.join([dat_dir(), 'sims/', sim, '/', str_mneut, 'eV/'])
 
 
+def hades_dir():  
+    return ''.join([dat_dir(), 'sims/paco/'])
+
+
 def dat_dir(): 
     ''' directory that contains all the data files, defined by environment 
     variable $IQUENCH_DIR

@@ -21,9 +21,9 @@ if __name__=="__main__":
         t00 = time.time() 
         assert np.array(nsubbox).max() <= nside**3 
 
-        _dir = ''.join([UT.mNuDir(0.0, sim=sim), str(nreal), '/ICs/'])
+        _dir = ''.join([UT.hades_dir(), 'subbox/ics/']) 
         if not os.path.isdir(_dir): raise ValueError("directory %s not found" % _dir)
-        F = lambda isub: ''.join([_dir, 'ics.nside', str(nside), '.', str(isub), '.hdf5'])
+        F = lambda isub: ''.join([_dir, 'ics.', str(nreal), '.nside', str(nside), '.', str(isub), '.hdf5'])
 
         # read in full IC box. 
         print('Reading in full IC box...') 
@@ -137,15 +137,21 @@ if __name__=="__main__":
         sim = 'paco'
         t00 = time.time() 
     
-        _dir = ''.join([UT.mNuDir(mneut, sim=sim), str(nreal), '/snapdir_', str(nzbin).zfill(3), '/'])
-        if not os.path.isdir(_dir): raise ValueError("directory %s not found" % _dir)
         # snapshot subbox file 
-        F = lambda isub: ''.join([_dir, 'snap_', str(nzbin).zfill(3), '.nside', str(nside), '.', str(isub), '.hdf5']) 
+        #_dir = ''.join([UT.mNuDir(mneut, sim=sim), str(nreal), '/snapdir_', str(nzbin).zfill(3), '/'])
+        _dir = ''.join([UT.hades_dir(), 'subbox/zbin', str(nzbin), '/']) 
+        if not os.path.isdir(_dir): raise ValueError("directory %s not found" % _dir)
+        F = lambda isub: ''.join([_dir, 
+            'part.', str(mneut), 'eV.', str(nreal), '.z', str(nzbin), '.nside', str(nside), '.', str(isub), '.hdf5']) 
                 
         # read in full box of Particles
         t0 = time.time() 
         fullbox = mNuCat.mNuParticles(mneut, nreal, nzbin, sim=sim, verbose=True)
         print('full box read in takes: %f mins' % ((time.time() - t0)/60.))
+        mem = sys.getsizeof(fullbox)
+        for k in fullbox.keys(): 
+            mem += sys.getsizeof(fullbox[k])
+        print('%f bytes' % mem)
         isort_box = np.argsort(fullbox['ID'])
 
         def _make_particle_subbox(isubbox): 
@@ -167,8 +173,13 @@ if __name__=="__main__":
                 for i in range(3): 
                     subbox[k][i,:,:,:] = \
                             fullbox[k][:,i][isort_box][(sub_id - 1).astype('int')].reshape((N_partside, N_partside, N_partside))
-        
-            fsub = h5py.File(F(isubbox), 'w') # save to hdf5 file 
+            
+            try: 
+                fsub = h5py.File(F(isubbox), 'w') # save to hdf5 file 
+            except IOError: 
+                print("IOError opening %s" % F(isubbox))
+                return None
+
             for k in ['ID', 'Position', 'Velocity']:  
                 fsub.create_dataset(k, data=subbox[k]) 
 
@@ -179,11 +190,15 @@ if __name__=="__main__":
             return None 
 
         print('Constructing subboxes using %i processes...' % n_cpu)
-        pewl = MP.Pool(processes=n_cpu)
-        pewl.map(_make_particle_subbox, [(isubbox) for isubbox in nsubbox]) 
-        pewl.close()
-        pewl.terminate()
-        pewl.join() 
+        if n_cpu > 1: 
+            pewl = MP.Pool(processes=n_cpu)
+            pewl.map(_make_particle_subbox, [(isubbox) for isubbox in nsubbox]) 
+            pewl.close()
+            pewl.terminate()
+            pewl.join() 
+        else: 
+            for isubbox in nsubbox: 
+                _make_particle_subbox(isubbox)
         print('Everything took %f mins' % ((time.time() - t00)/60.))
 
     # randomly check a few subboxes to make sure. 
